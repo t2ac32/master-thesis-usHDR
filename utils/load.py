@@ -49,14 +49,10 @@ def get_hdr_label(ids, dir, suffix):
             
             # imageIO
             img = cv2.imread(img_name, flags = cv2.IMREAD_ANYDEPTH)
-            
-            #print('-----------Label type:', type(img))
-            #print('-----------Label shape:', img.shape)
             img = only_resizeCV(img,w=224,h=224)
             print('-----------Label shape:', img.shape)
             img = np.asarray(img)
             #img = np.expand_dims(img,0)
-            print('label label label label label label label label label label label label ')
             yield img
     
         
@@ -94,14 +90,13 @@ def get_ldr(ids, dir, suffix):
             img_name = dir + id + '/exVivo_' + str(formatter(i)) + suffix
             img = Image.open(img_name)   
             img = only_resize(img,(224,224))
-            #print('>>>>>>>>>>>>>>>> Reducing SHAPE: ' , img.shape)
-            #img= img[:,:,0]
-            #img = np.expand_dims(img,0)
-            #print('>>>>>>>>>>>>>>>> Reduced SHAPE: ' , img.shape)
+            # print('>>>>>>>>>>>>>>>> Reducing SHAPE: ' , img.shape)
+            # img= img[:,:,0]
+            # img = np.expand_dims(img,0)
+            # print('>>>>>>>>>>>>>>>> Reduced SHAPE: ' , img.shape)
             ''' Array must be:
                 (batch_size, height, width, channels)
              '''
-            # print('-----------ldr image shape', img.shape)
             yield img
 
 def switch_and_normalize(imgs):
@@ -117,14 +112,14 @@ def get_imgs_and_masks(ids, dir_img, dir_mask, scale):
     imgs = get_ldr(ids, dir_img, '.png')
     # need to transform from HWC to CHW if more than 1 channel
     imgs_switched   = map(hwc_to_chw, imgs)
-    #imgs_normalized = map(normalize, imgs_switched)
+    imgs_normalized = map(normalize, imgs_switched)
 
     #=====When using subsets of ldr images===========
     #imgs_normalized = switch_and_normalize(imgs)
     hdr_suffix = 'stack_hdr_image.hdr'#'hdrReinhard_local.png'
     masks = get_hdr_label(ids, dir_mask, hdr_suffix)
     masks = map(hwc_to_chw, imgs)
-    return zip(imgs_switched, masks)
+    return zip(imgs_normalized, masks)
 
 
 def get_full_img_and_mask(id, dir_img, dir_mask):

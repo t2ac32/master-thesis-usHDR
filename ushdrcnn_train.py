@@ -87,9 +87,8 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
         thrTensor = thrTensor.cuda()
         oneT      = oneT.cuda()
     # print('input_ shape:', in_y.shape)
-    #print('in_y',in_y)
-    msk       = torch.argmax(in_y ,3 ,keepdim=True).to(dtype=torch.double)
-    #print('msk',msk)
+    msk       = torch.max(in_y ,3 ,keepdim=True)[0]
+    print('msk',msk.shape)
     th        = torch.max(zeros, msk - 1.0 + thr)
     #print('th', th)
     th        = torch.div(th ,thrTensor)
@@ -252,8 +251,6 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
         cost_input_output = torch.mean(trgt_square)
         print('cost_input_output', cost_input_output)
     return cost, cost_input_output
-
-
 # =====Learning parameters ======================================================
 num_epochs = 100
 start_step = 0.0
@@ -329,13 +326,8 @@ def train_net(net,
 
         for i, b in enumerate(batch(train, batch_size)):
             imgs = np.array([i[0] for i in b]).astype(np.float32)
-            '''
-            data_transforms = transforms.Compose([transforms.Grayscale(num_output_channels=1),
-                                                 transforms.Resize(224),
-                                                 transforms.CenterCrop(224),
-                                                 transforms.ToTensor()])
-            '''
-            print('>>>>>>>>>>>>>>>> Batch SHAPE: ' , imgs.shape)
+            
+            print('>>>>>>> Batch SHAPE: ' , imgs.shape)
             # print('imgs type: ', type(imgs))
             true_masks = np.array([i[1] for i in b])
             print('>>>>>>> True masks:', true_masks.shape)
