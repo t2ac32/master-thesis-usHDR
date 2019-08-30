@@ -88,7 +88,7 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
         oneT      = oneT.cuda()
     # print('input_ shape:', in_y.shape)
     msk       = torch.max(in_y ,3 ,keepdim=True)[0]
-    print('msk',msk.shape)
+    #print('msk',msk.shape)
     th        = torch.max(zeros, msk - 1.0 + thr)
     #print('th', th)
     th        = torch.div(th ,thrTensor)
@@ -227,7 +227,7 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
 
         cost =              torch.mean((lambda_ir * square_yill + (1.0 - lambda_ir) * square_refl) * msk)
         cost_input_output = torch.mean((lambda_ir * square_xyill + (1.0 - lambda_ir) * square_refl) * msk)
-        print('cost: ', cost)
+        #print('cost: ', cost)
         print('cost_input_output', cost_input_output)
     else:
         #print('>>>>> y:', len(y.size()))
@@ -355,8 +355,7 @@ def train_net(net,
 
             #loss = criterion(masks_probs_flat, true_masks_flat)
             cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
-            print('cost:', cost)
-            print('cost_input_output:', cost)
+            print('cost:', cost.item, 'cost_input_output:', cost_input_output.item)
             # loss is torch tensor
             epoch_loss += cost.item()
             print('Current Epoch loss:', cost.item())
@@ -370,7 +369,7 @@ def train_net(net,
 
         if 1:
             val_dice = eval_net(net, val, gpu)
-            print('Validation Dice Coeff: {}'.format(val_dice))
+            print('Validation Dice Coef f: {}'.format(val_dice))
 
         if save_cp:
             torch.save(net.state_dict(),
@@ -378,7 +377,7 @@ def train_net(net,
             print('Checkpoint {} saved !'.format(epoch + 1))
 
         if use_PN:
-            end_msg = "main.py finisheed at: {}(".format(str(currentDT))
+            end_msg = "train.py finisheed at: {}(".format(str(currentDT))
             push = pb.push_note("pycharm: Finish", end_msg)
 
 
