@@ -122,3 +122,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+#Ignored Folders
+runs/
+
+LDR_DataSet/c_images/
+
+LDR_DataSet/Org_images/
