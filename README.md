@@ -1,1 +1,81 @@
 master-thesis-usHDR
+
+# Deep learning HDR DATASET
+
+terminal command
+```
+python ushdrcnn_train.py --batch-size=15 -g
+```
+Check tensorbaord Summary after training
+```
+tensorboard --logdir=runs
+```
+
+| Datasets                   | Inputs         | Input_imgs|
+| ---------------------------|:-------------: | --------: |
+| newDataset                 | 1901           | 28515     |
+| LDR2_fakeComp_DataSet      | 26             |  390      |
+
+
+## new_DataSet
+
+**File Structure**
+```Bash
+├──Originals/
+|  ├─Study/
+|  ├─ date-generic/
+|     |- 00.b8 -> 15.b8
+├──images/
+|  ├──Study/
+|        | exVivo_xx.png
+|        | exVivo_power.txt
+|        ├─Results/
+|           | - stack_hdr_image.hdr
+|           | - hdrReinhard_global.png
+|           | - hdrReinhard_local.png
+```
+
+## LDR_DataSet
+
+**Folder Structure**
+```Bash
+├──Org_images/
+|   ├── LDR_01469_0xxxx.tiff
+├──c_images/
+|   ├──LDR_0xxxx/
+|       | exVivo_xx.png
+|       | exVivo_power.txt
+|       ├──Results/
+|           | stack_hdr_image.hdr
+|           | hdrReinhard_global.png
+|           | hdrReinhard_local.png
+```
+
+
+
+## Fakehdr dataset v2
+
+**biggest image:**    LDR_01469.tiff
+
+  | maxH: 839 | maxH: 632  |
+  | ----------|------------|
+
+**Smallest image:**    LDR_00864.tiff
+
+  | minH: 236 | minH: 279  |
+  | ----------|------------|
+
+**File Structure**
+
+```Bash
+├──Org_images/
+|   ├── LDR_0xxxx.tiff
+├──c_images/
+|   ├── LDR_0xxxx/
+|        | exVivo_xx.png
+|        | exVivo_power.txt
+|        ├──Results/
+|           | stack_hdr_image.hdr
+|           | hdrReinhard_global.png
+|           | hdrReinhard_local.png
+```

@@ -274,6 +274,8 @@ def train_net(net,
               img_scale=0.5):
     # Writer will output to ./runs/ directory by default
     writer = SummaryWriter()
+    train_summary = SummaryWriter()
+    valid_summary = SummaryWriter()
     # === Localize training data ===================================================
     print("Getting images directory")
     dir_img = os.path.join(data_dir, 'Org_images/')
@@ -327,14 +329,15 @@ def train_net(net,
         for i, b in enumerate(batch(train, batch_size)):
             imgs = np.array([i[0] for i in b]).astype(np.float32)
             
-            print('>>>>>>> Batch SHAPE: ' , imgs.shape)
-            # print('imgs type: ', type(imgs))
             true_masks = np.array([i[1] for i in b])
-            print('>>>>>>> True masks:', true_masks.shape)
             imgs = torch.from_numpy(imgs)
             true_masks = torch.from_numpy(true_masks)
-            print('>>>>>>> Img size', imgs.size())
             
+            # print('imgs type: ', type(imgs))
+            
+            #print('>>>>>>> Batch SHAPE: ' , imgs.shape)
+            #print('>>>>>>> True masks: ', true_masks.shape)
+            #print('>>>>>>> Img size', imgs.size())
             
             if gpu:
                 imgs = imgs.cuda()
@@ -347,17 +350,20 @@ def train_net(net,
 
             # Predicted mask images
             masks_pred = net(imgs)
-            #print('--------------masks_pred', masks_pred.shape)
-            masks_probs_flat = masks_pred.view(-1)
-            #print('--------------masks_pred_flat', masks_probs_flat.shape)
+            #print('>>>>>> masks_pred: ', masks_pred.shape)
+            #masks_probs_flat = masks_pred.view(-1)
             # Ground Truth images of masks
-            true_masks_flat = true_masks.view(-1)
+            #true_masks_flat = true_masks.view(-1)
+            #print('--------------masks_pred', masks_pred.shape)
+            #print('--------------masks_pred_flat', masks_probs_flat.shape)
+            
 
             #loss = criterion(masks_probs_flat, true_masks_flat)
             cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
-            print('cost:', cost.item, 'cost_input_output:', cost_input_output.item)
-            # loss is torch tensor
+            #loss is torch tensor
             epoch_loss += cost.item()
+
+            print('cost:', cost.item, 'cost_input_output:', cost_input_output.item)
             print('Current Epoch loss:', cost.item())
             print('{0:.4f} --- loss: {1:.6f}'.format(i * batch_size / N_train, cost.item()))
 
@@ -368,8 +374,15 @@ def train_net(net,
         print('Epoch finished ! Loss: {}'.format(epoch_loss / i))
 
         if 1:
-            val_dice = eval_net(net, val, gpu)
-            print('Validation Dice Coef f: {}'.format(val_dice))
+            val_loss = eval_hdr_net(net, val, gpu)
+            print('Validation loss: {:05.4f}'.format(val_loss))
+            valid_summary.add_scalar('Loss/validation_loss',val_loss, epoch)
+        
+        # Training and validation loss for Tensorboard
+        
+        #file_writer.add_summary(valid_summary, step)
+        train_summary.add_scalar('Loss/training_loss',epoch_loss,epoch)
+        #file_writer.add_summary(train_summary, step)
 
         if save_cp:
             torch.save(net.state_dict(),
@@ -380,6 +393,31 @@ def train_net(net,
             end_msg = "train.py finisheed at: {}(".format(str(currentDT))
             push = pb.push_note("pycharm: Finish", end_msg)
 
+def eval_hdr_net(net, dataset, gpu=False):
+    """Evaluation without the densecrf with the dice coefficient"""
+    net.eval()
+    tot_loss = 0
+    for i, b in enumerate(dataset):
+        img = b[0]
+        true_mask = b[1]
+
+        img = torch.from_numpy(img).unsqueeze(0)
+        true_mask = torch.from_numpy(true_mask).unsqueeze(0)
+        #print('val img shape:', img.shape)
+        #print('val true shape:', true_mask.shape)
+        if gpu:
+            img = img.cuda()
+            true_mask = true_mask.cuda()
+
+        mask_pred = net(img)[0]
+        mask_pred = mask_pred.expand(1,-1,-1,-1)
+        #mask_pred = (mask_pred > 0.5).float()
+        #print('val pred shape:', mask_pred.shape)
+
+        #tot += dice_coeff(mask_pred, true_mask).item()
+        cost, cost_input_output = Hdr_loss(img, true_mask, mask_pred,sep_loss=False,gpu=gpu)
+        tot_loss += cost.item()
+        return tot_loss
 
 def get_args():
     parser = OptionParser()
