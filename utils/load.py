@@ -27,7 +27,7 @@ formatter = "{:02d}".format
 def get_ids(dir):
     """Returns a list of the ids in the directory"""
     """ Remove value x to get full list of ids, now just gets 1901 minus x where x [x:] """
-    return (f[:-4] for f in os.listdir(dir)[1801:]) #
+    return (f[:-4] for f in os.listdir(dir)) #[1801:]
 
 def split_ids(ids, n=2):
     """Split each id in n, creating n tuples (id, k) for each id"""
@@ -41,20 +41,16 @@ def to_cropped_imgs(ids, dir, suffix, scale):
         yield get_square(im, pos)
 
 def get_hdr_label(ids, dir, suffix):
-    """From a list of ids , return the set of ldr images"""
+    """From a list of ids , return the set of ldr images"""   
     for id in ids:
+        img_name = dir + id + '/Results/' + suffix
+        img = cv2.imread(img_name, flags = cv2.IMREAD_ANYDEPTH)
+        img = only_resizeCV(img,w=224,h=224)
+        img = np.asarray(img)
         for i in range(0, 15):
-            img_name = dir + id + '/Results/' + suffix
-            print('>>>>>>>>>>> LABEL NAME',img_name)
-            
             # imageIO
-            img = cv2.imread(img_name, flags = cv2.IMREAD_ANYDEPTH)
-            img = only_resizeCV(img,w=224,h=224)
-            print('-----------Label shape:', img.shape)
-            img = np.asarray(img)
             #img = np.expand_dims(img,0)
             yield img
-    
         
 def get_ldr_set(ids, dir, suffix): 
     counter     = 0
@@ -90,10 +86,6 @@ def get_ldr(ids, dir, suffix):
             img_name = dir + id + '/exVivo_' + str(formatter(i)) + suffix
             img = Image.open(img_name)   
             img = only_resize(img,(224,224))
-            # print('>>>>>>>>>>>>>>>> Reducing SHAPE: ' , img.shape)
-            # img= img[:,:,0]
-            # img = np.expand_dims(img,0)
-            # print('>>>>>>>>>>>>>>>> Reduced SHAPE: ' , img.shape)
             ''' Array must be:
                 (batch_size, height, width, channels)
              '''
@@ -116,9 +108,9 @@ def get_imgs_and_masks(ids, dir_img, dir_mask, scale):
 
     #=====When using subsets of ldr images===========
     #imgs_normalized = switch_and_normalize(imgs)
-    hdr_suffix = 'stack_hdr_image.hdr'#'hdrReinhard_local.png'
+    hdr_suffix = 'stack_hdr_image.hdr' #'hdrReinhard_local.png'
     masks = get_hdr_label(ids, dir_mask, hdr_suffix)
-    masks = map(hwc_to_chw, imgs)
+    masks = map(hwc_to_chw, masks)
     return zip(imgs_normalized, masks)
 
 

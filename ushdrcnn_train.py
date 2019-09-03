@@ -24,7 +24,7 @@ from pushbullet import Pushbullet
 currentDT = datetime.datetime.now()
 
 # FLAGS
-use_PN = True
+use_PN = False
 
 # Push notifications Setup
 if use_PN:
@@ -86,15 +86,11 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
         zeros     = zeros.cuda()
         thrTensor = thrTensor.cuda()
         oneT      = oneT.cuda()
-    # print('input_ shape:', in_y.shape)
+
     msk       = torch.max(in_y ,3 ,keepdim=True)[0]
-    #print('msk',msk.shape)
     th        = torch.max(zeros, msk - 1.0 + thr)
-    #print('th', th)
     th        = torch.div(th ,thrTensor)
-    #print('tj', th)
     msk       = torch.min(oneT, th ) 
-    #print('msk', msk)
     msk       = msk.repeat(1,1,1, 3)
     
     y_log_    = torch.log(in_y + eps).to(dtype=torch.double)
@@ -113,11 +109,11 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
         if gpu:filterx = filterx.cuda()
 
         conv = torch.nn.Conv2d(1 ,1 ,1 , bias = False)
-        filterx = filterx.permute(3 ,2 ,0 ,1).cuda()
+        filterx = filterx.permute(3 ,2 ,0 ,1).cuda() #permute(0,3,1,2)
         # print('filter: ', filterx.shape)
+        
         ## y_lum_lin_ 
         conv.weight = torch.nn.Parameter(filterx)
-
         ##this y must be y_ input of network
         z = in_y.permute(0,3,1,2)
         l = conv(z)
@@ -128,8 +124,8 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
         # print(l.shape)
 
         ## y_lum_lin 
-        e = (torch.exp(in_y)) - eps
-        z = e.permute(0,3,1,2); print('z: ', z.shape)
+        e = (torch.exp(y)) - eps
+        z = e.permute(0,3,1,2); #print('z: ', z.shape)
         l_ = conv(z)
         y_lum_lin = l_.permute(0,2,3,1)
 
@@ -326,13 +322,13 @@ def train_net(net,
         
         for i, b in enumerate(batch(train, batch_size)):
             step += 1
-            imgs = np.array([i[0] for i in b]).astype(np.float32)
-            true_masks = np.array([i[1] for i in b])
+            imgs = np.array([s[0] for s in b]).astype(np.float32)
+            true_masks = np.array([s[1] for s in b])
             imgs = torch.from_numpy(imgs)
             true_masks = torch.from_numpy(true_masks)
-            writer.add_image('input images', imgs[0], 0, dataformats='CHW')
-            writer.add_image('true masks', true_masks[0], 0, dataformats='CHW')
-            
+            writer.add_images('input batch', imgs, 0)
+            writer.add_images('true masks', true_masks, 0)
+            writer.close()
             # print('imgs type: ', type(imgs))
             #print('>>>>>>> Batch SHAPE: ' , imgs.shape)
             #print('>>>>>>> True masks: ', true_masks.shape)
@@ -341,18 +337,13 @@ def train_net(net,
             if gpu:
                 imgs = imgs.cuda()
                 true_masks = true_masks.cuda()
-
-            # grid = torchvision.utils.make_grid(imgs)
-            im_tag = 'batch'.format(step)
-            writer.add_image(im_tag, imgs[0], 0, dataformats='CHW')
             
-
             # Predicted mask images
             masks_pred = net(imgs)
             if add_prediction:
                 writer.add_image('Prediction', mask_pred[0], 0, dataformats='CHW')
                 add_prediction = False
-            #print('>>>>>> masks_pred: ', masks_pred.shape)
+                writer.close()
             #masks_probs_flat = masks_pred.view(-1)
             # Ground Truth images of masks
             #true_masks_flat = true_masks.view(-1)
@@ -362,14 +353,14 @@ def train_net(net,
 
             #loss = criterion(masks_probs_flat, true_masks_flat)
             cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
-            print('cost:', type(cost), 'cost_input_output:', type(cost_input_output))
+            #print('cost:', type(cost), 'cost_input_output:', type(cost_input_output))
             #loss is torch tensor
             running_loss += cost.item() 
             optimizer.zero_grad()
             cost.backward()
             optimizer.step()
             epoch_loss = running_loss / step
-            print('Epoch:{0:} , step: {1:}, Train Loss:{2:.6f}, running_loss:{3:.6f}'.format(epoch,step,epoch_loss,running_loss))
+            print('Epoch:{0:} , step: {1:}, cost:{2:}, Train Loss:{3:.9f}, running_loss:{4:.6f}'.format(epoch,step,cost,epoch_loss,running_loss))
             train_summary.add_scalar('Loss/training_loss',epoch_loss,epoch)
         print('-' * 50)
         print('Epoch finished !')
@@ -377,8 +368,7 @@ def train_net(net,
             
         if 1:
             val_loss, avrg_val_loss = eval_hdr_net(net, val, gpu)
-            val_loss = val_loss/step
-            print('Validation loss: {:05.4f}'.format(val_loss))
+            print('Validation loss: {:05.9f}'.format(val_loss))
             valid_summary.add_scalar('Loss/validation_loss',val_loss, epoch)
         
         # Training and validation loss for Tensorboard
@@ -395,34 +385,41 @@ def train_net(net,
     if use_PN:
         end_msg = "train.py finisheed at: {}(".format(str(currentDT))
         push = pb.push_note("pycharm: Finish", end_msg)
-    writer.close()
+    
 
 def eval_hdr_net(net, dataset, gpu=False):
     """Evaluation without the densecrf with the dice coefficient"""
     net.eval()
     tot_loss = 0
-
-    for i, b in enumerate(dataset):
-        img = b[0]
-        true_mask = b[1]
-        img = torch.from_numpy(img).unsqueeze(0)
-        true_mask = torch.from_numpy(true_mask).unsqueeze(0)
+    step = 0
+    for i, b in enumerate(batch(dataset, batch_size)):
+        step += 1
+        imgs = np.array([s[0] for s in b]).astype(np.float32)
+        true_masks = np.array([s[1] for s in b])
+        imgs = torch.from_numpy(imgs)
+        true_masks = torch.from_numpy(true_masks)
+        #img = b[0]
+        #true_mask = b[1]
+        #img = torch.from_numpy(img).unsqueeze(0)
+        #true_mask = torch.from_numpy(true_mask).unsqueeze(0)
         #print('val img shape:', img.shape)
         #print('val true shape:', true_mask.shape)
         if gpu:
-            img = img.cuda()
-            true_mask = true_mask.cuda()
+            imgs = imgs.cuda()
+            true_masks = true_masks.cuda()
 
-        mask_pred = net(img)[0]
-        mask_pred = mask_pred.expand(1,-1,-1,-1)
+        pred = net(imgs)
+        #mask_pred = mask_pred.expand(1,-1,-1,-1)
         #mask_pred = (mask_pred > 0.5).float()
             
         #tot += dice_coeff(mask_pred, true_mask).item()
-        cost, cost_input_output = Hdr_loss(img, true_mask, mask_pred,sep_loss=False,gpu=gpu)
+        cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu)
         tot_loss += cost.item()
-        avg_loss = tot_loss
- 
+        avg_loss = tot_loss/step 
+        print('Val Loss:{0:.6f}, running_val_loss:{1:.6f}'.format(avg_loss,tot_loss))
+            
         return tot_loss, avg_loss 
+
 def get_args():
     parser = OptionParser()
     parser.add_option('-e', '--epochs', dest='epochs', default=5, type='int',

@@ -79,3 +79,14 @@ tensorboard --logdir=runs
 |           | hdrReinhard_global.png
 |           | hdrReinhard_local.png
 ```
+
+| Training SETUP:       | Epoch finished ! 								|
+|Epochs: 1			    | Train Loss:0.000266							|
+|Batch size: 15		    | Val Loss:0.000046, running_val_loss:0.000046  |
+|Learning rate: 0.1	    | Validation loss: 0.000046188					|
+|Training size: 3042    | Training complete in 68m 48s					|
+| Validation size: 760  |												|
+|Checkpoints: False		|												|
+|CUDA: True				|												|	
+| ----------------------|-----------------------------------------------|
+
