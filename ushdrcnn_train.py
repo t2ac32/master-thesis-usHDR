@@ -359,9 +359,14 @@ def train_net(net,
             optimizer.zero_grad()
             cost.backward()
             optimizer.step()
-            epoch_loss = running_loss / step
-            print('Epoch:{0:} , step: {1:}, cost:{2:}, Train Loss:{3:.9f}, running_loss:{4:.6f}'.format(epoch,step,cost,epoch_loss,running_loss))
+
             train_summary.add_scalar('Loss/training_loss',epoch_loss,epoch)
+            
+            if step % 10 == 0:
+                epoch_loss = running_loss / step
+                print('Epoch:{0:} , step: {1:}, cost:{2:}, Train Loss:{3:.9f}, running_loss:{4:.6f}'.format(epoch,step,cost,epoch_loss,running_loss))
+                
+
         print('-' * 50)
         print('Epoch finished !')
         print('Train Loss:{:.6f}'.format(epoch_loss))
