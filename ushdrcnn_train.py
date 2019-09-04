@@ -9,6 +9,7 @@ import scipy.stats as st
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
 import torchvision
@@ -24,18 +25,6 @@ from pushbullet import Pushbullet
 currentDT = datetime.datetime.now()
 
 # FLAGS
-use_PN = False
-
-# Push notifications Setup
-if use_PN:
-    api_key = 'o.iiEaKoSMwHp5iFJkG4VGV4rIXE5YWKss'
-    pb = Pushbullet(api_key)
-    #  SEND PUSH NOTIFICATION PROGRAM STARTED
-    start_msg = "Running started at: {}(".format(str(currentDT))
-    push = pb.push_note("usHDR: Running", start_msg )
-
-
-
 
 # === Settings =================================================================
 
@@ -304,7 +293,7 @@ def train_net(net,
                               weight_decay=0.0005)
     # Binary cross entropy
     criterion = nn.BCELoss()
-    add_prediction = False
+    add_prediction = True
     since = time.time()
 
     for epoch in range(epochs):
@@ -340,8 +329,12 @@ def train_net(net,
             
             # Predicted mask images
             masks_pred = net(imgs)
+            masks_probs = F.sigmoid(masks_pred)
+            #masks_probs_flat = masks_probs.view(-1)
+            #true_masks_flat = true_masks.view(-1)
+            
             if add_prediction:
-                writer.add_image('Prediction', mask_pred[0], 0, dataformats='CHW')
+                writer.add_image('Prediction', masks_pred[0], 0, dataformats='CHW')
                 add_prediction = False
                 writer.close()
             #masks_probs_flat = masks_pred.view(-1)
@@ -353,6 +346,8 @@ def train_net(net,
 
             #loss = criterion(masks_probs_flat, true_masks_flat)
             cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
+            cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
+
             #print('cost:', type(cost), 'cost_input_output:', type(cost_input_output))
             #loss is torch tensor
             running_loss += cost.item() 
@@ -387,7 +382,7 @@ def train_net(net,
 
     time_elapsed = time.time() - since   
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))     
-    if use_PN:
+    if use_notifications:
         end_msg = "train.py finisheed at: {}(".format(str(currentDT))
         push = pb.push_note("pycharm: Finish", end_msg)
     
@@ -439,6 +434,8 @@ def get_args():
                       default=False, help='load file model')
     parser.add_option('-s', '--scale', dest='scale', type='float',
                       default=0.5, help='downscaling factor of the images')
+    parser.add_option('-n', '--notifications', action='store_true', dest='pushbullet',
+                      default=False, help='use pushbullet notifications')
 
     (options, args) = parser.parse_args()
     return options
@@ -457,6 +454,13 @@ if __name__ == '__main__':
         net.cuda()
         # cudnn.benchmark = True # faster convolutions, but more memory
 
+    if args.pushbullet:
+        use_notifications = True
+        api_key = 'o.iiEaKoSMwHp5iFJkG4VGV4rIXE5YWKss'
+        pb = Pushbullet(api_key)
+        #  SEND PUSH NOTIFICATION PROGRAM STARTED
+        start_msg = "Running started at: {}(".format(str(currentDT))
+        push = pb.push_note("usHDR: Running", start_msg )
     try:
         print("Trying... train")
         train_net(net=net,

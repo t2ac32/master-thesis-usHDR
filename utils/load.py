@@ -27,7 +27,7 @@ formatter = "{:02d}".format
 def get_ids(dir):
     """Returns a list of the ids in the directory"""
     """ Remove value x to get full list of ids, now just gets 1901 minus x where x [x:] """
-    return (f[:-4] for f in os.listdir(dir)) #[1801:]
+    return (f[:-4] for f in os.listdir(dir)[1801:]) #
 
 def split_ids(ids, n=2):
     """Split each id in n, creating n tuples (id, k) for each id"""

@@ -4,7 +4,7 @@ master-thesis-usHDR
 
 terminal command
 ```
-python ushdrcnn_train.py --batch-size=15 -g
+python ushdrcnn_train.py --epoch=10 --batch-size=15 -g
 ```
 Check tensorbaord Summary after training
 ```
@@ -94,41 +94,26 @@ polyaxon config set --host=10.23.0.18 --port 31811
 |           | hdrReinhard_local.png
 ```
 
-| Training SETUP:       | Epoch finished ! 								|
-|Epochs: 1			    | Train Loss:0.000266							|
-|Batch size: 15		    | Val Loss:0.000046, running_val_loss:0.000046  |
-|Learning rate: 0.1	    | Validation loss: 0.000046188					|
-|Training size: 3042    | Training complete in 68m 48s					|
-| Validation size: 760  |												|
-|Checkpoints: False		|												|
-|CUDA: True				|												|	
-| ----------------------|-----------------------------------------------|
+		| Training SETUP:       | Epoch finished ! 								|
+		|Epochs: 1			    | Train Loss:0.000266							|
+		|Batch size: 15		    | Val Loss:0.000046, running_val_loss:0.000046  |
+		|Learning rate: 0.1	    | Validation loss: 0.000046188					|
+		|Training size: 3042    | Training complete in 68m 48s					|
+		| Validation size: 760  |												|
+		|Checkpoints: False		|												|
+		|CUDA: True				|												|	
+		| ----------------------|-----------------------------------------------|
 
 
-        Training SETUP:
-        Epochs: 8
-        Batch size: 15
-        Learning rate: 0.1
-        Training size: 3042
-        Validation size: 760
-        Checkpoints: False
-        CUDA: True
 
-Epoch finished !
-Train Loss:0.000274
-Val Loss:0.000049, running_val_loss:0.000049
-Validation loss: 0.000049238
-Training complete in 399m 26s
-
-
-| Training SETUP:       | Epoch finished ! 								|
-|Epochs: 1			    | Train Loss:0.000266							|
-|Batch size: 15		    | Val Loss:0.000046, running_val_loss:0.000046  |
-|Learning rate: 0.1	    | Validation loss: 0.000046188					|
-|Training size: 3042    | Training complete in 68m 48s					|
-| Validation size: 760  |												|
-|Checkpoints: False		|												|
-|CUDA: True				|												|	
-| ----------------------|-----------------------------------------------|
+		| Training SETUP:       | Epoch finished ! 								|
+		|Epochs: 8			    | Train Loss:0.000274							|
+		|Batch size: 15		    | Val Loss:0.000049, running_val_loss:0.000049  |
+		|Learning rate: 0.1	    | Validation loss: 0.000049238					|
+		|Training size: 3042    | Training complete in 399m 26s					|
+		| Validation size: 760  |												|
+		|Checkpoints: False		|												|
+		|CUDA: True				|												|	
+		| ----------------------|-----------------------------------------------|
 
 

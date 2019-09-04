@@ -1,0 +1,43 @@
+---
+version: 1
+
+kind: experiment
+
+framework: pytorch
+
+build:
+   image: pytorch/pytorch:1.1.0-cuda10.0-cudnn7.5-runtime # Image name to use
+   build_steps:
+      - pip install -r requirements.txt
+environment:
+ resources:
+   cpu:
+     requests: 3
+     limits: 
+   memory:
+     requests: 8192
+     limits: 
+   gpu:
+     requests: 1
+     limits:
+params:
+  epochs: 10
+  batch_size: 15
+  lr: 0.001
+  save_cp: False
+  gpu: True
+  notifications: True
+  #img_scale:
+  #momentum: 0.9
+  #log_interval: 100
+  #batch_size_test: 15
+  #val_percent=0.20,
+              
+
+run:
+  cmd: python ushdrcnn_train.py  --epoch={{ epochs }} \
+                        --batch_size={{ batch_size }} \
+                         --lr={{ lr }} \
+                         --save_cp={{ save_cp }} \
+                         --gpu={{ gpu }} \
+                         --notifications={{ notifications }}
