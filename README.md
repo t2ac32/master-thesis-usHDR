@@ -11,6 +11,18 @@ Check tensorbaord Summary after training
 tensorboard --logdir=runs
 ```
 
+###Polyaxon
+```
+config local CLI
+polyaxon config set --host=10.23.0.18 --port 31811
+```
+	If error: polyaxon: command not found 
+	
+	Try adding the python installation to the PATH
+	```
+	python3 -m site &> /dev/null && PATH="$PATH:`python3 -m site --user-base`/bin"
+	```
+
 | Datasets                   | Inputs         | Input_imgs|
 | ---------------------------|:-------------: | --------: |
 | newDataset                 | 1901           | 28515     |
@@ -89,4 +101,32 @@ tensorboard --logdir=runs
 |Checkpoints: False		|												|
 |CUDA: True				|												|	
 | ----------------------|-----------------------------------------------|
+
+
+        Training SETUP:
+        Epochs: 8
+        Batch size: 15
+        Learning rate: 0.1
+        Training size: 3042
+        Validation size: 760
+        Checkpoints: False
+        CUDA: True
+
+Epoch finished !
+Train Loss:0.000274
+Val Loss:0.000049, running_val_loss:0.000049
+Validation loss: 0.000049238
+Training complete in 399m 26s
+
+
+| Training SETUP:       | Epoch finished ! 								|
+|Epochs: 1			    | Train Loss:0.000266							|
+|Batch size: 15		    | Val Loss:0.000046, running_val_loss:0.000046  |
+|Learning rate: 0.1	    | Validation loss: 0.000046188					|
+|Training size: 3042    | Training complete in 68m 48s					|
+| Validation size: 760  |												|
+|Checkpoints: False		|												|
+|CUDA: True				|												|	
+| ----------------------|-----------------------------------------------|
+
 
