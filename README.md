@@ -11,9 +11,11 @@ Check tensorbaord Summary after training
 tensorboard --logdir=runs
 ```
 
-###Polyaxon
+### Polyaxon
+
+Config local CLI
+
 ```
-config local CLI
 polyaxon config set --host=10.23.0.18 --port 31811
 ```
 	If error: polyaxon: command not found 
