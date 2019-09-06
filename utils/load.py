@@ -44,8 +44,12 @@ def get_hdr_label(ids, dir, suffix):
     """From a list of ids , return the set of ldr images"""   
     for id in ids:
         img_name = dir + id + '/Results/' + suffix
-        img = cv2.imread(img_name, flags = cv2.IMREAD_ANYDEPTH)
+        img = cv2.imread(img_name, -1) #flags = cv2.IMREAD_ANYDEPTH
         img = only_resizeCV(img,w=224,h=224)
+        
+        # chann 1
+        c1_max = img[..., 0].min()
+        print('max c1: {0:}'.format(c1_max))
         img = np.asarray(img)
         for i in range(0, 15):
             # imageIO
@@ -137,24 +141,16 @@ class HdrDataset(Dataset):
         self.transform = transform
 
     def __len__(self):
-        return len(self.ids)
+        return len(self.ids)*15
 
     def __getitem__(self, idx):
-        
-        image_folder = os.path.join(self.root_path, "images")
-        image_path = os.path.join(image_folder, file_id + ".png")
-        
-        mask_folder = os.path.join(self.root_path, "masks")
-        mask_path = os.path.join(mask_folder, file_id + ".png")
-        
-        image = load_image(image_path)
-        
-        if self.is_test:
-            return (image,)
-        else:
-            mask = load_image(mask_path, mask = True)
-            return image, mask
-        sample = {'image': image, 'landmarks': landmarks}
+
+        #modify to return one label 
+        images, targets = get_imgs_and_masks(ids, dir_img, dir_mask, scale)
+        for i in range(15):
+            tensor_x = torch.Tensor(images[i])
+            tensor_y = torch.Tensor(target)   
+            sample = {'input': tensor_x, 'target': tensor_y}
 
         if self.transform:
             sample = self.transform(sample)

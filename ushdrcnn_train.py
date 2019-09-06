@@ -12,13 +12,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DataLoader
+
 import torchvision
 from torchvision import datasets, transforms
 
-
 from eval import eval_net
 from unet import UNet
-from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, exist_program
+from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, exist_program, HdrDataset
 
 from pushbullet import Pushbullet
 # Setup date/ time
@@ -229,15 +230,14 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
 
     return cost, cost_input_output
 # =====Learning parameters ======================================================
-num_epochs = 100
-start_step = 0.0
-Learning_rate = 0.00005
-batch_size = 15
-sep_loss = True
+#num_epochs = 100
+#start_step = 0.0
+#Learning_rate = 0.00005
+#batch_size = args.batchsize
 lambda_ir = 0.5
-tran_size = 0.99
-buffer_size = 256
-rand_data = True
+#tran_size = 0.99
+#buffer_size = 256
+#rand_data = True
 print('setup finished')
 
 
@@ -250,9 +250,10 @@ def train_net(net,
               gpu=False,
               img_scale=0.5):
     # Writer will output to ./runs/ directory by default
-    writer = SummaryWriter()
-    train_summary = SummaryWriter()
-    valid_summary = SummaryWriter()
+    if args.tensorboard:
+        writer = SummaryWriter()
+        train_summary = SummaryWriter()
+        valid_summary = SummaryWriter()
     # === Localize training data ===================================================
     print("Getting images directory")
     dir_img = os.path.join(data_dir, 'Org_images/')
@@ -266,22 +267,13 @@ def train_net(net,
 
     # === Load Training/Validation data =====================================================
     iddataset = split_train_val(ids, val_percent)
-    #print(iddataset['train'])
-    #print(iddataset['val'])
-    print('''
-        Training SETUP:
-        Epochs: {}
-        Batch size: {}
-        Learning rate: {}
-        Training size: {}
-        Validation size: {}
-        Checkpoints: {}
-        CUDA: {}
-        '''.format(epochs, batch_size, lr, len(iddataset['train']),
-                   len(iddataset['val']), str(save_cp), str(gpu)))
-
+    #print(iddataset['train']) #print(iddataset['val'])
     N_train = len(iddataset['train'])
     N_val = len(iddataset['train'])
+    
+    loader_dataset = HdrDataset(iddataset['train'],
+                               dir_compressions,
+                               dir_mask)
 
     # optimizer = optim.SGD(net.parameters(),
     #    lr=lr,
@@ -295,6 +287,25 @@ def train_net(net,
     criterion = nn.BCELoss()
     add_prediction = True
     since = time.time()
+    print('''
+        Training SETUP:
+        Epochs: {}
+        Batch size: {}
+        Learning rate: {}
+        Training size: {}
+        Validation size: {}
+        Checkpoints: {}
+        CUDA: {}
+        '''.format(epochs, batch_size, lr, len(iddataset['train']),
+                   len(iddataset['val']), str(save_cp), str(gpu)))
+
+    for i in range(len(loader_dataset)):
+        sample = loader_dataset.__getitem__[i]
+
+        print(i, sample['image'].size(), sample['landmarks'].size())
+
+        if i == 3:
+            break
 
     for epoch in range(epochs):
         print('-' * 50)
@@ -303,7 +314,7 @@ def train_net(net,
 
         # reset the generators
         train = get_imgs_and_masks(iddataset['train'], dir_compressions, dir_mask, img_scale)
-        val = get_imgs_and_masks(iddataset['val'], dir_compressions, dir_mask, img_scale)
+        val   = get_imgs_and_masks(iddataset['val'], dir_compressions, dir_mask, img_scale)
 
         epoch_loss = 0
         running_loss = 0
@@ -315,12 +326,13 @@ def train_net(net,
             true_masks = np.array([s[1] for s in b])
             imgs = torch.from_numpy(imgs)
             true_masks = torch.from_numpy(true_masks)
-            writer.add_images('input batch', imgs, 0)
-            writer.add_images('true masks', true_masks, 0)
-            writer.close()
+            if args.tensorboard:
+                writer.add_images('input batch', imgs, 0)
+                writer.add_images('true masks', true_masks, 0)
+                writer.close()
             # print('imgs type: ', type(imgs))
-            #print('>>>>>>> Batch SHAPE: ' , imgs.shape)
-            #print('>>>>>>> True masks: ', true_masks.shape)
+            #print('>>>>>>> Input max: ' , torch.max(imgs[0]))
+            #print('>>>>>>> mask max : ', torch.max(true_masks[0]))
             #print('>>>>>>> Img size', imgs.size())
             
             if gpu:
@@ -329,14 +341,15 @@ def train_net(net,
             
             # Predicted mask images
             masks_pred = net(imgs)
+            #print('>>>>>>>> Pred max: ', torch.max(masks_pred[0]))
             masks_probs = F.sigmoid(masks_pred)
             #masks_probs_flat = masks_probs.view(-1)
             #true_masks_flat = true_masks.view(-1)
-            
-            if add_prediction:
-                writer.add_image('Prediction', masks_pred[0], 0, dataformats='CHW')
-                add_prediction = False
-                writer.close()
+            if args.tensorboard:
+                if add_prediction and step % 1000 == 0:
+                    writer.add_image('Prediction', masks_pred[0], 0, dataformats='CHW')
+                    add_prediction = False
+                    writer.close()
             #masks_probs_flat = masks_pred.view(-1)
             # Ground Truth images of masks
             #true_masks_flat = true_masks.view(-1)
@@ -345,8 +358,8 @@ def train_net(net,
             
 
             #loss = criterion(masks_probs_flat, true_masks_flat)
-            cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
-            cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
+            cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred, sep_loss=True, gpu=gpu)
+            #cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
 
             #print('cost:', type(cost), 'cost_input_output:', type(cost_input_output))
             #loss is torch tensor
@@ -355,9 +368,10 @@ def train_net(net,
             cost.backward()
             optimizer.step()
 
-            train_summary.add_scalar('Loss/training_loss',epoch_loss,epoch)
+            if args.tensorboard:
+                train_summary.add_scalar('Loss/training_loss',epoch_loss,epoch)
             
-            if step % 10 == 0:
+            if step % 20 == 0:
                 epoch_loss = running_loss / step
                 print('Epoch:{0:} , step: {1:}, cost:{2:}, Train Loss:{3:.9f}, running_loss:{4:.6f}'.format(epoch,step,cost,epoch_loss,running_loss))
                 
@@ -367,9 +381,10 @@ def train_net(net,
         print('Train Loss:{:.6f}'.format(epoch_loss))
             
         if 1:
-            val_loss, avrg_val_loss = eval_hdr_net(net, val, gpu)
+            val_loss, avrg_val_loss = eval_hdr_net(net, val, gpu,batch_size)
             print('Validation loss: {:05.9f}'.format(val_loss))
-            valid_summary.add_scalar('Loss/validation_loss',val_loss, epoch)
+            if args.tensorboard:
+                valid_summary.add_scalar('Loss/validation_loss',val_loss, epoch)
         
         # Training and validation loss for Tensorboard
         #file_writer.add_summary(valid_summary, step)
@@ -387,7 +402,8 @@ def train_net(net,
         push = pb.push_note("pycharm: Finish", end_msg)
     
 
-def eval_hdr_net(net, dataset, gpu=False):
+def eval_hdr_net(net, dataset, gpu=False,
+              batch_size=1):
     """Evaluation without the densecrf with the dice coefficient"""
     net.eval()
     tot_loss = 0
@@ -436,7 +452,8 @@ def get_args():
                       default=0.5, help='downscaling factor of the images')
     parser.add_option('-n', '--notifications', action='store_true', dest='pushbullet',
                       default=False, help='use pushbullet notifications')
-
+    parser.add_option('-t', '--tensorboard', action='store_true', dest='tensorboard',
+                      default=False, help='use tensorboard logging')
     (options, args) = parser.parse_args()
     return options
 
@@ -461,6 +478,8 @@ if __name__ == '__main__':
         #  SEND PUSH NOTIFICATION PROGRAM STARTED
         start_msg = "Running started at: {}(".format(str(currentDT))
         push = pb.push_note("usHDR: Running", start_msg )
+    
+
     try:
         print("Trying... train")
         train_net(net=net,
