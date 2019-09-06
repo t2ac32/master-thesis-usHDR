@@ -40,7 +40,11 @@ sy = 224
 # dataSets_dir = 'D:/TUM/Master Thesis/Images/DataSets/LDR2_fakeComp_DataSet/'
 dataSets_dir = os.path.join(wk_dir, "LDR_DataSet")
 data_dir = os.path.join(dataSets_dir)
-data_dir_jpg = os.path.join(data_dir, "jpg")
+
+dir_img = os.path.join(dataSets_dir, 'Org_images/')
+dir_compressions = os.path.join(dataSets_dir, 'c_images/')
+dir_mask = os.path.join(dataSets_dir, 'c_images/')
+dir_checkpoint = 'checkpoints/'
 
 
 # log_dir = os.path.join(output_dir, "logs")
@@ -248,7 +252,8 @@ def train_net(net,
               val_percent=0.20,
               save_cp=False,
               gpu=False,
-              img_scale=0.5):
+              img_scale=0.5,
+              expositions_num=15):
     # Writer will output to ./runs/ directory by default
     if args.tensorboard:
         writer = SummaryWriter()
@@ -256,25 +261,15 @@ def train_net(net,
         valid_summary = SummaryWriter()
     # === Localize training data ===================================================
     print("Getting images directory")
-    dir_img = os.path.join(data_dir, 'Org_images/')
-    dir_compressions = os.path.join(data_dir, 'c_images/')
-    dir_mask = os.path.join(data_dir, 'c_images/')
-    dir_checkpoint = 'checkpoints/'
-
+    
     ids = get_ids(dir_img)
-    ids = split_ids(ids)
-    # print(sum(1 for i in ids))
+    #print(sum(1 for i in ids))
 
     # === Load Training/Validation data =====================================================
     iddataset = split_train_val(ids, val_percent)
     #print(iddataset['train']) #print(iddataset['val'])
     N_train = len(iddataset['train'])
-    N_val = len(iddataset['train'])
-    
-    loader_dataset = HdrDataset(iddataset['train'],
-                               dir_compressions,
-                               dir_mask)
-
+    N_val = len(iddataset['val'])
     # optimizer = optim.SGD(net.parameters(),
     #    lr=lr,
     #    momentum=0.9,
@@ -298,34 +293,37 @@ def train_net(net,
         CUDA: {}
         '''.format(epochs, batch_size, lr, len(iddataset['train']),
                    len(iddataset['val']), str(save_cp), str(gpu)))
-
-    for i in range(len(loader_dataset)):
-        sample = loader_dataset.__getitem__[i]
-
-        print(i, sample['image'].size(), sample['landmarks'].size())
-
-        if i == 3:
-            break
-
+    
+    train_dataset = HdrDataset(iddataset['train'],
+                               dir_compressions,
+                               dir_mask,
+                               expositions_num)
+    train_data_loader = DataLoader(train_dataset,batch_size=batch_size,
+                             num_workers=1)
+    
+    
     for epoch in range(epochs):
         print('-' * 50)
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
         net.train()
 
         # reset the generators
-        train = get_imgs_and_masks(iddataset['train'], dir_compressions, dir_mask, img_scale)
-        val   = get_imgs_and_masks(iddataset['val'], dir_compressions, dir_mask, img_scale)
+        #train = get_imgs_and_masks(iddataset['train'], dir_compressions, dir_mask, img_scale, expositions_num)
+        #val   = get_imgs_and_masks(iddataset['val'], dir_compressions, dir_mask, img_scale,expositions_num)
 
         epoch_loss = 0
         running_loss = 0
         step = 0
         
-        for i, b in enumerate(batch(train, batch_size)):
+        for i, b in enumerate(train_data_loader):
             step += 1
-            imgs = np.array([s[0] for s in b]).astype(np.float32)
-            true_masks = np.array([s[1] for s in b])
-            imgs = torch.from_numpy(imgs)
-            true_masks = torch.from_numpy(true_masks)
+            imgs, true_masks = b['input'], b['target']
+            print(i, b['input'].size(), b['target'].size())
+
+            #imgs = np.array([s[0] for s in b]).astype(np.float32)
+            #true_masks = np.array([s[1] for s in b])
+            #imgs = torch.from_numpy(imgs)
+            #true_masks = torch.from_numpy(true_masks)
             if args.tensorboard:
                 writer.add_images('input batch', imgs, 0)
                 writer.add_images('true masks', true_masks, 0)
@@ -342,7 +340,7 @@ def train_net(net,
             # Predicted mask images
             masks_pred = net(imgs)
             #print('>>>>>>>> Pred max: ', torch.max(masks_pred[0]))
-            masks_probs = F.sigmoid(masks_pred)
+            #masks_probs = F.sigmoid(masks_pred)
             #masks_probs_flat = masks_probs.view(-1)
             #true_masks_flat = true_masks.view(-1)
             if args.tensorboard:
@@ -381,7 +379,9 @@ def train_net(net,
         print('Train Loss:{:.6f}'.format(epoch_loss))
             
         if 1:
-            val_loss, avrg_val_loss = eval_hdr_net(net, val, gpu,batch_size)
+            val_loss, avrg_val_loss = eval_hdr_net(net, iddataset['val'],
+                                                    gpu,batch_size,
+                                                    expositions_num=15)
             print('Validation loss: {:05.9f}'.format(val_loss))
             if args.tensorboard:
                 valid_summary.add_scalar('Loss/validation_loss',val_loss, epoch)
@@ -403,17 +403,22 @@ def train_net(net,
     
 
 def eval_hdr_net(net, dataset, gpu=False,
-              batch_size=1):
+              batch_size=1,
+              expositions_num=15):
     """Evaluation without the densecrf with the dice coefficient"""
+    train_dataset = HdrDataset(dataset,
+                               dir_compressions,
+                               dir_mask,
+                               expositions_num)
+    val_data_loader = DataLoader(train_dataset,batch_size=batch_size,
+                             num_workers=1)
     net.eval()
     tot_loss = 0
     step = 0
-    for i, b in enumerate(batch(dataset, batch_size)):
+    for i, b in enumerate(val_data_loader):
         step += 1
-        imgs = np.array([s[0] for s in b]).astype(np.float32)
-        true_masks = np.array([s[1] for s in b])
-        imgs = torch.from_numpy(imgs)
-        true_masks = torch.from_numpy(true_masks)
+        imgs, true_masks = b['input'], b['target']
+            
         #img = b[0]
         #true_mask = b[1]
         #img = torch.from_numpy(img).unsqueeze(0)
@@ -442,6 +447,8 @@ def get_args():
                       help='number of epochs')
     parser.add_option('-b', '--batch-size', dest='batchsize', default=15,
                       type='int', help='batch size')
+    parser.add_option('-x', '--expo-num', dest='expositions', default=15,
+                      type='int', help='number of exposition that compund an HDR.')
     parser.add_option('-l', '--learning-rate', dest='lr', default=0.1,
                       type='float', help='learning rate')
     parser.add_option('-g', '--gpu', action='store_true', dest='gpu',
@@ -487,7 +494,8 @@ if __name__ == '__main__':
                   batch_size=args.batchsize,
                   lr=args.lr,
                   gpu=args.gpu,
-                  img_scale=args.scale)
+                  img_scale=args.scale,
+                  expositions_num= args.expositions)
     except KeyboardInterrupt:
         torch.save(net.state_dict(), 'INTERRUPTED.pth')
         print('Saved interrupt')
