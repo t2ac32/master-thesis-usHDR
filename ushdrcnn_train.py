@@ -318,17 +318,13 @@ def train_net(net,
         for i, b in enumerate(train_data_loader):
             step += 1
             imgs, true_masks = b['input'], b['target']
-            print(i, b['input'].size(), b['target'].size())
+            #print(i, b['input'].size(), b['target'].size())
 
-            #imgs = np.array([s[0] for s in b]).astype(np.float32)
-            #true_masks = np.array([s[1] for s in b])
-            #imgs = torch.from_numpy(imgs)
-            #true_masks = torch.from_numpy(true_masks)
             if args.tensorboard:
                 writer.add_images('input batch', imgs, 0)
                 writer.add_images('true masks', true_masks, 0)
                 writer.close()
-            # print('imgs type: ', type(imgs))
+            #print('imgs type: ', type(imgs))
             #print('>>>>>>> Input max: ' , torch.max(imgs[0]))
             #print('>>>>>>> mask max : ', torch.max(true_masks[0]))
             #print('>>>>>>> Img size', imgs.size())
@@ -359,18 +355,18 @@ def train_net(net,
             cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred, sep_loss=True, gpu=gpu)
             #cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
 
-            #print('cost:', type(cost), 'cost_input_output:', type(cost_input_output))
+            print('cost:', cost, 'cost_input_output:', cost_input_output)
             #loss is torch tensor
             running_loss += cost.item() 
             optimizer.zero_grad()
             cost.backward()
             optimizer.step()
-
+            epoch_loss = running_loss / step
+            
             if args.tensorboard:
                 train_summary.add_scalar('Loss/training_loss',epoch_loss,epoch)
             
-            if step % 20 == 0:
-                epoch_loss = running_loss / step
+            if step % 2 == 0:
                 print('Epoch:{0:} , step: {1:}, cost:{2:}, Train Loss:{3:.9f}, running_loss:{4:.6f}'.format(epoch,step,cost,epoch_loss,running_loss))
                 
 
