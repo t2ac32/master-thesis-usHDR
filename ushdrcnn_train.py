@@ -305,6 +305,7 @@ def train_net(net,
     for epoch in range(epochs):
         print('-' * 50)
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
+        begin_of_epoch = time.time()
         net.train()
 
         # reset the generators
@@ -355,7 +356,7 @@ def train_net(net,
             cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred, sep_loss=True, gpu=gpu)
             #cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
 
-            print('cost:', cost, 'cost_input_output:', cost_input_output)
+            #print('cost:', cost, 'cost_input_output:', cost_input_output)
             #loss is torch tensor
             running_loss += cost.item() 
             optimizer.zero_grad()
@@ -373,7 +374,8 @@ def train_net(net,
         print('-' * 50)
         print('Epoch finished !')
         print('Train Loss:{:.6f}'.format(epoch_loss))
-            
+        time_eepoch = begin_of_epoch - since 
+        print('eta for Epoch: ', time_eepoch)  
         if 1:
             val_loss, avrg_val_loss = eval_hdr_net(net, iddataset['val'],
                                                     gpu,batch_size,
