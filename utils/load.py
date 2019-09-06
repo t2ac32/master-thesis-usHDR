@@ -27,7 +27,7 @@ formatter = "{:02d}".format
 def get_ids(dir):
     """Returns a list of the ids in the directory"""
     """ Remove value x to get full list of ids, now just gets 1901 minus x where x [x:] """
-    return (f[:-4] for f in os.listdir(dir)[1801:]) #
+    return (f[:-4] for f in os.listdir(dir)[1701:]) #
 
 def split_ids(ids, n=2):
     """Split each id in n, creating n tuples (id, k) for each id"""
@@ -105,12 +105,12 @@ class HdrDataset(Dataset):
         self.transform = transform
 
     def __len__(self):
-        return len(self.ids)*15
+        return len(self.ids)
 
     def __getitem__(self, idx):
 
         img_id = self.ids[idx]
-        print('Getting id:',idx,'for image:', img_id)
+        #print('Getting id:',idx,'for image:', img_id)
         
         images, target = get_imgs_and_masks(img_id, self.dir_img,
                                             self.dir_mask,
