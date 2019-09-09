@@ -4,7 +4,7 @@ master-thesis-usHDR
 
 terminal command
 ```
-python ushdrcnn_train.py --epoch=10 --batch-size=15 -g
+python ushdrcnn_train.py --epoch=10 --batch-size=15 -g -n -t 
 ```
 Check tensorbaord Summary after training
 ```
@@ -13,7 +13,12 @@ tensorboard --logdir=runs
 
 ### Polyaxon
 
-Config local CLI
+### Documentation
+ - Hyper parameter search 
+ 	https://docs.polyaxon.com/concepts/experiment-groups-hyperparameters-optimization/
+ - Grid search
+  	https://docs.polyaxon.com/references/polyaxon-optimization-engine/grid-search/
+#### Config local CLI
 
 ```
 polyaxon config set --host=10.23.0.18 --port 31811
@@ -24,6 +29,19 @@ polyaxon config set --host=10.23.0.18 --port 31811
 	```
 	python3 -m site &> /dev/null && PATH="$PATH:`python3 -m site --user-base`/bin"
 	```
+#### Check polyaxonfile.yml
+```
+polyaxon check -f polyaxonfile.yaml
+```
+where
+- -u: upload/update project
+- -f update polyaxonfile.yaml
+- -l enable logs onto the standard output (the terminal)
+
+### Check experiment:
+``` 
+http://cluster.ifl:31811
+```
 
 | Datasets                   | Inputs         | Input_imgs|
 | ---------------------------|:-------------: | --------: |

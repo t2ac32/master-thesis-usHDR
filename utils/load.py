@@ -12,18 +12,19 @@ import os
 
 import numpy as np
 import time 
-import torch
-from torch.utils.data import Dataset, DataLoader
 from   tqdm import tqdm
 from   PIL  import Image
 import cv2
 
+import torch
+from torch.utils.data import Dataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 
 from .utils import resize_and_crop, get_square, normalize, hwc_to_chw, only_resize, only_resizeCV
 
 formatter = "{:02d}".format
-
+tensorboard = True
 def get_ids(dir):
     """Returns a list of the ids in the directory"""
     """ Remove value x to get full list of ids, now just gets 1901 minus x where x [x:] """
@@ -47,7 +48,9 @@ def get_hdr_label(id, dir, suffix):
     img = only_resizeCV(img,w=224,h=224)      
     #c1_max = img[..., 0].min()
     #print('max c1: {0:}'.format(c1_max))
-    img = np.asarray(img)
+    img = np.asarray(img, dtype='f')
+    #print('max:', np.amax(img))
+    normalized = (img-np.amin(img))/(np.amax(img)- np.amin(img))
     return img
 
 def get_ldrs(id, dir, suffix,expositions_num): 
@@ -115,14 +118,22 @@ class HdrDataset(Dataset):
         images, target = get_imgs_and_masks(img_id, self.dir_img,
                                             self.dir_mask,
                                             self.expositions)
+        
+        
         for i in range(self.expositions):
 
             tensor_x = torch.Tensor(images[i])
             tensor_y = torch.Tensor(target)   
             sample = {'input': tensor_x, 'target': tensor_y}
-
             #print(i, sample['input'].size(), sample['target'].size())
-
+            
+        if idx == 0:
+            if tensorboard:
+                print('saving a sample {0:}: input,target'.format(img_id))
+                writer = SummaryWriter()
+                writer.add_images('sample inputs', images, 0)
+                writer.add_images('sample target', target, 0,dataformats='CHW')
+                
 
         if self.transform:
             sample = self.transform(sample)

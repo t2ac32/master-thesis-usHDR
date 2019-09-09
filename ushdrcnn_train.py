@@ -27,6 +27,9 @@ currentDT = datetime.datetime.now()
 
 # FLAGS
 
+
+
+
 # === Settings =================================================================
 
 sys.path.insert(0, "../")
@@ -37,14 +40,13 @@ sx = 224
 sy = 224
 
 
-# dataSets_dir = 'D:/TUM/Master Thesis/Images/DataSets/LDR2_fakeComp_DataSet/'
-dataSets_dir = os.path.join(wk_dir, "LDR_DataSet")
-data_dir = os.path.join(dataSets_dir)
 
-dir_img = os.path.join(dataSets_dir, 'Org_images/')
-dir_compressions = os.path.join(dataSets_dir, 'c_images/')
-dir_mask = os.path.join(dataSets_dir, 'c_images/')
-dir_checkpoint = 'checkpoints/'
+def setPolyaxon_dir():
+    # dataSets_dir = 'D:/TUM/Master Thesis/Images/DataSets/LDR2_fakeComp_DataSet/'
+   
+   
+
+
 
 
 # log_dir = os.path.join(output_dir, "logs")
@@ -81,6 +83,7 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
         thrTensor = thrTensor.cuda()
         oneT      = oneT.cuda()
 
+    # REVISAR MASCARA
     msk       = torch.max(in_y ,3 ,keepdim=True)[0]
     th        = torch.max(zeros, msk - 1.0 + thr)
     th        = torch.div(th ,thrTensor)
@@ -219,7 +222,9 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False,gpu=False):
     else:
         #print('>>>>> y:', len(y.size()))
         #print('>>>>> y_log_:', len(y_log_.size()))
-        out_sub_log = torch.sub(y, y_log_) * msk
+
+        #out_sub_log = torch.sub(y, y_log_) * msk
+        out_sub_log = torch.sub(y, x_log) * msk
         sqr_of_log  = torch.mul(out_sub_log, out_sub_log)
         cost        = torch.mean(sqr_of_log)
         # print('>>>>> out_sub_log:', out_sub_log)
@@ -245,23 +250,32 @@ lambda_ir = 0.5
 print('setup finished')
 
 
-def train_net(net,
-              epochs=5,
-              batch_size=1,
-              lr=0.1,
-              val_percent=0.20,
+def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
               save_cp=False,
               gpu=False,
               img_scale=0.5,
-              expositions_num=15):
-    # Writer will output to ./runs/ directory by default
-    if args.tensorboard:
-        writer = SummaryWriter()
-        train_summary = SummaryWriter()
-        valid_summary = SummaryWriter()
-    # === Localize training data ===================================================
-    print("Getting images directory")
+              expositions_num=15,
+              tensorboard=False,
+              use_notifications=False,
+              polyaxon=False):
     
+    # Writer will output to ./runs/ directory by default
+    if tensorboard:
+        writer = SummaryWriter()
+        #train_summary = SummaryWriter()
+        #valid_summary = SummaryWriter()
+    # === Localize training data ===================================================
+    if polyaxon:
+        dataSets_dir = os.path.join(wk_dir, "LDR_DataSet")
+    else:
+         dataSets_dir = os.path.join(wk_dir,"data/", "LDR_DataSet")
+    
+    dir_img = os.path.join(dataSets_dir, 'Org_images/')
+    dir_compressions = os.path.join(dataSets_dir, 'c_images/')
+    dir_mask = os.path.join(dataSets_dir, 'c_images/')
+    dir_checkpoint = 'checkpoints/'
+
+    print("Getting images directory")
     ids = get_ids(dir_img)
     #print(sum(1 for i in ids))
 
@@ -279,8 +293,7 @@ def train_net(net,
                               lr=lr,
                               weight_decay=0.0005)
     # Binary cross entropy
-    criterion = nn.BCELoss()
-    add_prediction = True
+    criterion = nn.MSELoss()
     since = time.time()
     print('''
         Training SETUP:
@@ -294,9 +307,7 @@ def train_net(net,
         '''.format(epochs, batch_size, lr, len(iddataset['train']),
                    len(iddataset['val']), str(save_cp), str(gpu)))
     
-    train_dataset = HdrDataset(iddataset['train'],
-                               dir_compressions,
-                               dir_mask,
+    train_dataset = HdrDataset(iddataset['train'], dir_compressions, dir_mask,
                                expositions_num)
     train_data_loader = DataLoader(train_dataset,batch_size=batch_size,
                              num_workers=1)
@@ -307,24 +318,20 @@ def train_net(net,
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
         begin_of_epoch = time.time()
         net.train()
+            # reset the generators
+            #train = get_imgs_and_masks(iddataset['train'], dir_compressions, dir_mask, img_scale, expositions_num)
+            #val   = get_imgs_and_masks(iddataset['val'], dir_compressions, dir_mask, img_scale,expositions_num)
 
-        # reset the generators
-        #train = get_imgs_and_masks(iddataset['train'], dir_compressions, dir_mask, img_scale, expositions_num)
-        #val   = get_imgs_and_masks(iddataset['val'], dir_compressions, dir_mask, img_scale,expositions_num)
 
         epoch_loss = 0
         running_loss = 0
         step = 0
-        
+        save_step_sample = True
         for i, b in enumerate(train_data_loader):
             step += 1
             imgs, true_masks = b['input'], b['target']
             #print(i, b['input'].size(), b['target'].size())
 
-            if args.tensorboard:
-                writer.add_images('input batch', imgs, 0)
-                writer.add_images('true masks', true_masks, 0)
-                writer.close()
             #print('imgs type: ', type(imgs))
             #print('>>>>>>> Input max: ' , torch.max(imgs[0]))
             #print('>>>>>>> mask max : ', torch.max(true_masks[0]))
@@ -335,55 +342,61 @@ def train_net(net,
                 true_masks = true_masks.cuda()
             
             # Predicted mask images
+            optimizer.zero_grad()
             masks_pred = net(imgs)
             #print('>>>>>>>> Pred max: ', torch.max(masks_pred[0]))
             #masks_probs = F.sigmoid(masks_pred)
             #masks_probs_flat = masks_probs.view(-1)
             #true_masks_flat = true_masks.view(-1)
-            if args.tensorboard:
-                if add_prediction and step % 1000 == 0:
-                    writer.add_image('Prediction', masks_pred[0], 0, dataformats='CHW')
-                    add_prediction = False
-                    writer.close()
+            
             #masks_probs_flat = masks_pred.view(-1)
             # Ground Truth images of masks
             #true_masks_flat = true_masks.view(-1)
             #print('--------------masks_pred', masks_pred.shape)
             #print('--------------masks_pred_flat', masks_probs_flat.shape)
-            
-
             #loss = criterion(masks_probs_flat, true_masks_flat)
+            
             cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred, sep_loss=True, gpu=gpu)
-            #cost, cost_input_output = Hdr_loss(imgs, true_masks, masks_pred,sep_loss=False,gpu=gpu)
-
+            #cost = criterion(masks_pred,true_masks)
             #print('cost:', cost, 'cost_input_output:', cost_input_output)
             #loss is torch tensor
             running_loss += cost.item() 
-            optimizer.zero_grad()
             cost.backward()
             optimizer.step()
             epoch_loss = running_loss / step
             
-            if args.tensorboard:
-                train_summary.add_scalar('Loss/training_loss',epoch_loss,epoch)
-            
-            if step % 2 == 0:
-                print('Epoch:{0:} , step: {1:}, cost:{2:}, Train Loss:{3:.9f}, running_loss:{4:.6f}'.format(epoch,step,cost,epoch_loss,running_loss))
+            if tensorboard:
+                writer.add_scalar('Loss/training_loss',epoch_loss,epoch )
                 
+                if save_step_sample:
+                    print('saving train step {0:} sample : input,target & pred'.format(step))
+                    train_sample =  [imgs[0],true_masks[0], masks_pred[0]]   
+                    grid = torchvision.utils.make_grid(train_sample,nrow=3)
+                    writer.add_image('train_sample', grid, 0)
+                
+            if step % 30 == 0:
+                print('Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, running_loss:{3:.6f}'.format(step,cost,epoch_loss,running_loss))
+                
+                
+                
+            save_step_sample = False
 
-        print('-' * 50)
+        print('-' * 15)
         print('Epoch finished !')
+        print('-' * 15)
         print('Train Loss:{:.6f}'.format(epoch_loss))
-        time_eepoch = begin_of_epoch - since 
-        print('eta for Epoch: ', time_eepoch)  
+        time_epoch = time.time() - begin_of_epoch 
+        print('Epoch ETC: {:.0f}m {:.0f}s'.format(time_epoch // 60, time_epoch % 60))   
         if 1:
             val_loss, avrg_val_loss = eval_hdr_net(net, iddataset['val'],
-                                                    gpu,batch_size,
-                                                    expositions_num=15)
-            print('Validation loss: {:05.9f}'.format(val_loss))
-            if args.tensorboard:
-                valid_summary.add_scalar('Loss/validation_loss',val_loss, epoch)
-        
+                                                   criterion,
+                                                   gpu,
+                                                   batch_size,
+                                                   expositions_num=15)
+            print('Validation loss: {0:}'.format(val_loss))
+            if tensorboard:
+                writer.add_scalar('Loss/validation_loss',val_loss, epoch)
+                
         # Training and validation loss for Tensorboard
         #file_writer.add_summary(valid_summary, step)
         #file_writer.add_summary(train_summary, step)
@@ -395,20 +408,22 @@ def train_net(net,
 
     time_elapsed = time.time() - since   
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))     
+    if tensorboard:
+        writer.close()
     if use_notifications:
         end_msg = "train.py finisheed at: {}(".format(str(currentDT))
         push = pb.push_note("pycharm: Finish", end_msg)
     
 
-def eval_hdr_net(net, dataset, gpu=False,
+def eval_hdr_net(net, dataset,criterion, gpu=False,
               batch_size=1,
               expositions_num=15):
     """Evaluation without the densecrf with the dice coefficient"""
-    train_dataset = HdrDataset(dataset,
+    val_dataset = HdrDataset(dataset,
                                dir_compressions,
                                dir_mask,
                                expositions_num)
-    val_data_loader = DataLoader(train_dataset,batch_size=batch_size,
+    val_data_loader = DataLoader(val_dataset,batch_size=batch_size,
                              num_workers=1)
     net.eval()
     tot_loss = 0
@@ -432,15 +447,18 @@ def eval_hdr_net(net, dataset, gpu=False,
         #mask_pred = (mask_pred > 0.5).float()
             
         #tot += dice_coeff(mask_pred, true_mask).item()
-        cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu)
+        #cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu)
+        cost = criterion(pred,true_masks)
         tot_loss += cost.item()
         avg_loss = tot_loss/step 
         print('Val Loss:{0:.6f}, running_val_loss:{1:.6f}'.format(avg_loss,tot_loss))
-            
+
         return tot_loss, avg_loss 
 
 def get_args():
     parser = OptionParser()
+    parser.add_option('-p', '--polyaxon', action='store_true', dest='polyaxon',
+                      default=False, help='set data dirs to use polyaxon')
     parser.add_option('-e', '--epochs', dest='epochs', default=5, type='int',
                       help='number of epochs')
     parser.add_option('-b', '--batch-size', dest='batchsize', default=15,
@@ -462,11 +480,14 @@ def get_args():
     (options, args) = parser.parse_args()
     return options
 
-
 if __name__ == '__main__':
     args = get_args()
 
     net = UNet(n_channels=3, n_classes=3)
+
+    if args.polyaxon:
+        print('setting polyaxon')
+        setPolyaxon_dir()
 
     if args.load:
         net.load_state_dict(torch.load(args.load))
@@ -477,7 +498,6 @@ if __name__ == '__main__':
         # cudnn.benchmark = True # faster convolutions, but more memory
 
     if args.pushbullet:
-        use_notifications = True
         api_key = 'o.iiEaKoSMwHp5iFJkG4VGV4rIXE5YWKss'
         pb = Pushbullet(api_key)
         #  SEND PUSH NOTIFICATION PROGRAM STARTED
@@ -493,7 +513,10 @@ if __name__ == '__main__':
                   lr=args.lr,
                   gpu=args.gpu,
                   img_scale=args.scale,
-                  expositions_num= args.expositions)
+                  expositions_num= args.expositions,
+                  tensorboard=args.tensorboard,
+                  use_notifications=args.pushbullet)
+
     except KeyboardInterrupt:
         torch.save(net.state_dict(), 'INTERRUPTED.pth')
         print('Saved interrupt')
