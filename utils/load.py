@@ -18,17 +18,38 @@ import cv2
 
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
+try:
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter()
+    tb = True
+except ImportError:
+    print('Counld not Import module Tensorboard')
+    tb = False
+    try: 
+        from tensorboardX import SummaryWriter
+        writer = SummaryWriter()
+        tb = True
+    except ImportError:
+        print('Could not import TensorboardX')
+        tb = False
+
+try:
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter()
+    
+except ImportError:
+    print('Could not load module Tensorboard')
+    
 
 from .utils import resize_and_crop, get_square, normalize, hwc_to_chw, only_resize, only_resizeCV
 
 formatter = "{:02d}".format
-tensorboard = True
+tensorboard= tb
 def get_ids(dir):
     """Returns a list of the ids in the directory"""
     """ Remove value x to get full list of ids, now just gets 1901 minus x where x [x:] """
-    return (f[:-4] for f in os.listdir(dir)) #[1401:]
+    return (f[:-4]  for f in os.listdir(dir)[1801:]) #[1801:]
 
 def split_ids(ids, n=2):
     """Split each id in n, creating n tuples (id, k) for each id"""
@@ -106,36 +127,34 @@ class HdrDataset(Dataset):
         self.dir_mask = dir_mask
         self.expositions = expositions
         self.transform = transform
+        
 
     def __len__(self):
         return len(self.ids)
 
     def __getitem__(self, idx):
-
+ 
         img_id = self.ids[idx]
-        #print('Getting id:',idx,'for image:', img_id)
         
+        #print('Getting id:',idx,'for image:', img_id)
+
         images, target = get_imgs_and_masks(img_id, self.dir_img,
                                             self.dir_mask,
                                             self.expositions)
         
         
-        for i in range(self.expositions):
-
-            tensor_x = torch.Tensor(images[i])
-            tensor_y = torch.Tensor(target)   
-            sample = {'input': tensor_x, 'target': tensor_y}
-            #print(i, sample['input'].size(), sample['target'].size())
+        tensor_x = torch.Tensor(images[i])
+        tensor_y = torch.Tensor(target)   
+        sample = {'input': tensor_x, 'target': tensor_y}
+        print(i, sample['input'].size(), sample['target'].size())
             
         if idx == 0:
             if tensorboard:
                 print('saving a sample {0:}: input,target'.format(img_id))
-                writer = SummaryWriter()
                 writer.add_images('sample inputs', images, 0)
                 writer.add_images('sample target', target, 0,dataformats='CHW')
-                
 
         if self.transform:
             sample = self.transform(sample)
-
-        return sample
+        
+        return sample  
