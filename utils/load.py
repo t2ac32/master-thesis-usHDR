@@ -74,16 +74,16 @@ def get_hdr_label(id, dir, suffix):
     normalized = (img-np.amin(img))/(np.amax(img)- np.amin(img))
     return img
 
-def get_ldrs(id, dir, suffix,expositions_num): 
+def get_ldr(id, dir, suffix,exposition_num): 
     # print('Getting set: ',id)
-    for i in range(0, expositions_num):
-        img_name = dir + id + '/exVivo_' + str(formatter(i)) + suffix
-        img = Image.open(img_name)   
-        img = only_resize(img,(224,224))
-        ''' Array must be:
-            (batch_size, height, width, channels)
-        '''
-        yield img
+    i = exposition_num
+    img_name = dir + id + '/exVivo_' + str(formatter(i)) + suffix
+    img = Image.open(img_name)   
+    img = only_resize(img,(224,224))
+    ''' Array must be:
+        (batch_size, height, width, channels)
+    '''
+    yield img
 
 def switch_and_normalize(imgs):
     for subset in imgs:
@@ -92,12 +92,12 @@ def switch_and_normalize(imgs):
 
         yield imgs_normalized
 
-def get_imgs_and_masks(id, dir_img, dir_mask, expositions_num):
+def get_imgs_and_masks(id, dir_img, dir_mask, exposition_num):
     """Return all the couples (img, mask)"""
     #imgs = to_cropped_imgs(ids, dir_img, '.jpeg', scale)
-    imgs = get_ldrs(id, dir_img, '.png',expositions_num)
+    img = get_ldr(id, dir_img, '.png',exposition_num)
     # need to transform from HWC to CHW if more than 1 channel
-    imgs_switched   = map(hwc_to_chw, imgs)
+    imgs_switched   = map(hwc_to_chw, img)
     imgs_normalized = map(normalize, imgs_switched)
     imgs_normalized = np.array([l for l in imgs_normalized]).astype(np.float32)
 
@@ -137,22 +137,23 @@ class HdrDataset(Dataset):
         img_id = self.ids[idx]
         
         #print('Getting id:',idx,'for image:', img_id)
-
-        images, target = get_imgs_and_masks(img_id, self.dir_img,
+        exposure = idx%(self.expositions)
+        image, target = get_imgs_and_masks(img_id, self.dir_img,
                                             self.dir_mask,
-                                            self.expositions)
+                                            exposure)
         
         
-        tensor_x = torch.Tensor(images[i])
+        tensor_x = torch.Tensor(image)
+        tensor_x = tensor_x.squeeze()
         tensor_y = torch.Tensor(target)   
         sample = {'input': tensor_x, 'target': tensor_y}
-        print(i, sample['input'].size(), sample['target'].size())
-            
+        print(idx, sample['input'].size(), sample['target'].size())
+        
         if idx == 0:
             if tensorboard:
                 print('saving a sample {0:}: input,target'.format(img_id))
-                writer.add_images('sample inputs', images, 0)
-                writer.add_images('sample target', target, 0,dataformats='CHW')
+                writer.add_image('sample inputs', image, 0, dataformats='NCHW')
+                writer.add_image('sample target', target, 0,dataformats='CHW')
 
         if self.transform:
             sample = self.transform(sample)
