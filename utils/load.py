@@ -147,7 +147,7 @@ class HdrDataset(Dataset):
         tensor_x = tensor_x.squeeze()
         tensor_y = torch.Tensor(target)   
         sample = {'input': tensor_x, 'target': tensor_y}
-        print(idx, sample['input'].size(), sample['target'].size())
+        #print(idx, sample['input'].size(), sample['target'].size())
         
         if idx == 0:
             if tensorboard:

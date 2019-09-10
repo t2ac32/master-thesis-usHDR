@@ -5,6 +5,8 @@ master-thesis-usHDR
 terminal command
 ```
 python ushdrcnn_train.py --epoch=10 --batch-size=15 -g -n -t 
+python ushdrcnn_train.py --epochs=10 --batch-size=15 --expo-num=15 -g -n -t
+
 ```
 Check tensorbaord Summary after training
 ```

@@ -29,7 +29,7 @@ params:
   notifications: True
   polyaxon: True
   expositions: 15
-  tensorb: False
+  tensorb: True
   #img_scale:
   #momentum: 0.9
   #log_interval: 100

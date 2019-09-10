@@ -15,6 +15,8 @@ from torch.utils.data import DataLoader
 import torchvision
 from torchvision import datasets, transforms
 
+from polyaxon_client.tracking import Experiment, get_data_paths, get_outputs_path
+
 from eval import eval_net
 from unet import UNet
 from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, exist_program, HdrDataset
@@ -267,7 +269,11 @@ def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
         #valid_summary = SummaryWriter()
     # === Localize training data ===================================================
     if polyaxon:
-        dataSets_dir = os.path.join(wk_dir,"data/", "LDR_DataSet")
+        data_paths = get_data_paths()
+        outputs_path = get_outputs_path()
+        dataset = "LDR_DataSet"
+        #dataSets_dir = os.path.join(wk_dir,"data/", "LDR_DataSet")
+        dataSets_dir = training_data_path = data_paths['data1']  + dataset
     else:
         dataSets_dir = os.path.join(wk_dir, "LDR_DataSet")
     print(dataSets_dir)
@@ -364,7 +370,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
             train_loss += cost.item() * imgs.size(0)
             cost.backward()
             optimizer.step()
-            epoch_loss = train_loss / (len(train_dataset)*15)
+            epoch_loss = train_loss / len(train_dataset)
             
             if tb:
                 writer.add_scalar('Loss/training_loss',epoch_loss,epoch )
@@ -376,7 +382,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
                     writer.add_image('train_sample', grid, 0)
                 
             if step % 30 == 0:
-                print('Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, running_loss:{3:.6f}'.format(step,cost,epoch_loss,running_loss))
+                print('Step: {0:}, cost:{1:}, Epoch Loss:{2:.9f}, train_loss:{3:.6f}'.format(step,cost,epoch_loss,train_loss))
                 
                 
                 
@@ -385,7 +391,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
         print('-' * 15)
         print('Epoch finished !')
         print('-' * 15)
-        print('Train Loss:{:.6f}'.format(epoch_loss))
+        print('Epoch Loss:{:.6f}'.format(epoch_loss))
         time_epoch = time.time() - begin_of_epoch 
         print('Epoch ETC: {:.0f}m {:.0f}s'.format(time_epoch // 60, time_epoch % 60))   
         if 1:
@@ -397,7 +403,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
                                                    batch_size,
                                                    expositions_num=15,
                                                    tb=tb)
-            epoch_val_loss = val_loss / (len(val_dataset)*15)
+            epoch_val_loss = val_loss / len(val_dataset)
             print('Validation loss: {0:}'.format(epoch_val_loss))
             if tb:
                 writer.add_scalar('Loss/validation_loss',epoch_val_loss, epoch)
