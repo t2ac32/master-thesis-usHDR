@@ -65,13 +65,20 @@ def to_cropped_imgs(ids, dir, suffix, scale):
 def get_hdr_label(id, dir, suffix):
     """From a list of ids , return the set of ldr images"""   
     img_name = dir + id + '/Results/' + suffix
+    
+    # When using .hdr files
     img = cv2.imread(img_name, -1) #flags = cv2.IMREAD_ANYDEPTH
-    img = only_resizeCV(img,w=224,h=224)      
-    #c1_max = img[..., 0].min()
-    #print('max c1: {0:}'.format(c1_max))
-    img = np.asarray(img, dtype='f')
-    #print('max:', np.amax(img))
-    normalized = (img-np.amin(img))/(np.amax(img)- np.amin(img))
+    img = only_resizeCV(img,w=224,h=224)  
+    img = np.asarray(img, dtype=np.float32)
+    '''
+    # WHEN USING TONEMAP.PNG (do not change axis this are in CHW form already)
+    img = Image.open(img_name)   
+    img = only_resize(img,(224,224))
+    img = np.expand_dims(img, axis=0)
+    print('HDR max:', np.amax(img))
+    print('HDR min:', np.amin(img))
+    '''
+    #print('HDR shape:',img.shape)
     return img
 
 def get_ldr(id, dir, suffix,exposition_num): 
@@ -80,6 +87,10 @@ def get_ldr(id, dir, suffix,exposition_num):
     img_name = dir + id + '/exVivo_' + str(formatter(i)) + suffix
     img = Image.open(img_name)   
     img = only_resize(img,(224,224))
+    #print('ldr shape; ', img.shape)
+
+    #print('ldr max:', np.amax(img))
+    
     ''' Array must be:
         (batch_size, height, width, channels)
     '''
@@ -103,7 +114,7 @@ def get_imgs_and_masks(id, dir_img, dir_mask, exposition_num):
 
     #=====When using subsets of ldr images===========
     #imgs_normalized = switch_and_normalize(imgs)
-    hdr_suffix = 'stack_hdr_image.hdr' #'hdrReinhard_local.png'
+    hdr_suffix =  'stack_hdr_image.hdr' #'hdrReinhard_local.png'
     mask = get_hdr_label(id, dir_mask, hdr_suffix)
     mask = hwc_to_chw(mask)
     return imgs_normalized, mask

@@ -24,6 +24,7 @@ from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch
 from pushbullet import Pushbullet
 
 try:
+    print('Using Tensorboard')
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
 except ImportError:
@@ -61,9 +62,9 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False, gpu=False, tb=Fal
     in_y = input_y.permute(0 ,2 ,3 ,1).to(dtype=torch.double)
     target = true_x.permute(0 ,2 ,3 ,1).to(dtype=torch.double)
     y      = logits.permute(0, 2, 3, 1).to(dtype=torch.double)
-    # print('input y ' , in_y.dtype)
-    # print('target', target.dtype)ju
-    # print('y'     , y.dtype)
+    #print('input y ' , in_y.shape)
+    #print('target', target.shape)
+    #print('y (logits)'     , y.shape)
     '''
         Args:
                     true: a tensor of shape [B, 1, H, W].
@@ -77,20 +78,33 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False, gpu=False, tb=Fal
     #sinput_         = input_.permute((0, 2, 3, 1))
     # For masked loss, only using information near saturated image regions
     thr       = 0.05 # Threshold for blending
-    zeros     = torch.DoubleTensor([0.0]).to(dtype=torch.double)
+    zero      = torch.DoubleTensor([0.0]).to(dtype=torch.double)
     thrTensor = torch.DoubleTensor([0.05]).to(dtype=torch.double)
     oneT      = torch.DoubleTensor([1.0]).to(dtype=torch.double)
     if gpu:
-        zeros     = zeros.cuda()
+        zero      = zero.cuda()
         thrTensor = thrTensor.cuda()
         oneT      = oneT.cuda()
 
     # REVISAR MASCARA
-    msk       = torch.max(in_y ,3 ,keepdim=True)[0]
-    th        = torch.max(zeros, msk - 1.0 + thr)
-    th        = torch.div(th ,thrTensor)
-    msk       = torch.min(oneT, th ) 
-    msk       = msk.repeat(1,1,1, 3)
+    msk   = torch.max(in_y ,3)[0]
+    add   = torch.add(torch.sub(msk, oneT), thr)
+    div   = torch.div(add, thr)
+    th_op = torch.max(zero, div)
+    msk = torch.min(oneT, th_op )
+    msk = msk.expand(1,-1,-1, -1)
+    msk = msk.repeat(3,1,1,1)
+    msk = msk.permute(1,2,3,0)
+
+    '''
+    msk       = torch.max(in_y ,3)[0]
+    print('reduced_msk: ', msk.shape)
+    th        = torch.max(zeros, (msk - 1.0 + thr)/thr)
+    msk       = torch.min(oneT, th )
+    msk = msk.expand(1,-1,-1, -1)
+    msk = msk.permute(1,0,2,3)
+    msk = msk.repeat(1,3,1,1)
+    '''
     if tb:
         writer.add_images('loss_mask',msk,0, dataformats='NHWC')
             
@@ -229,8 +243,7 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False, gpu=False, tb=Fal
         #print('>>>>> y_log_:', len(y_log_.size()))
 
         out_sub_log = torch.mul(torch.sub(y, y_log_), msk)
-        #out_sub_log = torch.sub(y, x_log) * msk
-        sqr_of_log  = torch.mul(out_sub_log, out_sub_log)
+        sqr_of_log  = torch.pow(out_sub_log, 2.0)
         cost        = torch.mean(sqr_of_log)
         # print('>>>>> out_sub_log:', out_sub_log)
         # print('>>>>> sqr_of_log:', sqr_of_log)
@@ -238,7 +251,7 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False, gpu=False, tb=Fal
         #print('cost: ', cost)
         # TODO test
         trgt_sub_log = torch.mul(torch.sub(y_log_, x_log), msk)
-        trgt_square  = torch.mul(trgt_sub_log, trgt_sub_log)
+        trgt_square  = torch.pow(trgt_sub_log, 2.0)
         cost_input_output = torch.mean(trgt_square)
         #print('cost_input_output', cost_input_output)
 
@@ -311,13 +324,12 @@ def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
         Validation size: {}
         Checkpoints: {}
         CUDA: {}
-        '''.format(epochs, batch_size, lr, len(iddataset['train']),
-                   len(iddataset['val']), str(save_cp), str(gpu)))
+        '''.format(epochs, batch_size, lr, N_train,
+                  N_val, str(save_cp), str(gpu)))
     
     train_dataset = HdrDataset(iddataset['train'], dir_compressions, dir_mask,
                                expositions_num)
-    train_data_loader = DataLoader(train_dataset,batch_size=batch_size,
-                             num_workers=1)
+    train_data_loader = DataLoader(train_dataset,batch_size=batch_size)
     
     
     for epoch in range(epochs):
@@ -351,6 +363,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
             # Predicted mask images
             optimizer.zero_grad()
             masks_pred = net(imgs)
+            writer.add_image('prediction_sample', masks_pred, 0,dataformats='NCHW')
+        
                 #print('>>>>>>>> Pred max: ', torch.max(masks_pred[0]))
                 #masks_probs = F.sigmoid(masks_pred)
                 #masks_probs_flat = masks_probs.view(-1)
@@ -370,7 +384,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
             train_loss += cost.item() * imgs.size(0)
             cost.backward()
             optimizer.step()
-            epoch_loss = train_loss / len(train_dataset)
+            epoch_loss = train_loss / N_train
             
             if tb:
                 writer.add_scalar('Loss/training_loss',epoch_loss,epoch )
@@ -423,15 +437,14 @@ def train_net(net, epochs=5, batch_size=1, lr=0.1, val_percent=0.20,
         writer.close()
     if use_notifications:
         end_msg = "train.py finisheed at: {}(".format(str(currentDT))
-        push = pb.push_note("pycharm: Finish", end_msg)
+        push = pb.push_note("usHDR: Finish", end_msg)
     
 
 def eval_hdr_net(net, dataset,criterion, gpu=False,
               batch_size=1,
               expositions_num=15, tb=False):
     """Evaluation without the densecrf with the dice coefficient"""
-    val_data_loader = DataLoader(dataset,batch_size=batch_size,
-                             num_workers=1)
+    val_data_loader = DataLoader(dataset,batch_size=batch_size)
     net.eval()
     tot_loss = 0
     step = 0

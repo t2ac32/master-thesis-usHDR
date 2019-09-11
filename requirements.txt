@@ -1,8 +1,8 @@
 Cython==0.29.13
 pushbullet.py==0.11.0
-torch==1.2.0
-tensorboardX==1.8
-torchvision==0.3.0
+torch
+tensorboardX
+torchvision
 matplotlib==3.1.1
 numpy==1.17.1
 pydensecrf==1.0rc3
