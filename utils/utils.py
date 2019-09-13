@@ -122,7 +122,7 @@ def saveTocheckpoint(folder,experiment_name,epoch,input_img,grnd_img,pred_img):
     print('dir_path', dir_path)
     if check_dir(dir_path): 
         file_name  = dir_path + '/epoch{}'.format(epoch+1) + '.png'  
-        e_imgs = [input_img, grnd_img, input_img]
+        e_imgs = [input_img, grnd_img, pred_img]
         save_image(e_imgs, file_name,nrow=3)
 
 # credits to https://stackoverflow.com/users/6076729/manuel-lagunas
