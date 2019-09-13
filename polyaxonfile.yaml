@@ -8,7 +8,11 @@ framework: pytorch
 build:
    image: pytorch/pytorch:1.1.0-cuda10.0-cudnn7.5-runtime # Image name to use
    build_steps:
-      - pip install -r requirements.txt
+      - apt update
+      - apt install -y libglib2.0-0 libsm6 libxext6 libxrender-dev 
+      - pip install opencv-python
+      - pip install -r requirements.txt 
+
 environment:
  resources:
    cpu:
@@ -22,14 +26,15 @@ environment:
      limits: 1
 params:
   epochs: 10
-  batch_size: 15
+  batch_size: 120
   lr: 0.001
-  save_cp: False
+  save: False
   gpu: True
   notifications: True
   polyaxon: True
   expositions: 15
-  tensorb: True
+  tensor_b: True
+  checkpoint: $POLYAXON_RUN_OUTPUTS_PATH
   #img_scale:
   #momentum: 0.9
   #log_interval: 100
@@ -38,13 +43,14 @@ params:
               
 
 run:
-  cmd: python ushdrcnn_train.py  --epochs={{ epochs }} \
+  cmd: python -u ushdrcnn_train.py  --epochs={{ epochs }} \
                         --batch-size={{ batch_size }} \
-                         --lr={{ lr }} \
+                         --learning-rate={{ lr }} \
                          --expo-num={{expositions}} \
-                         --save_cp={{ save_cp }} \
-                         --polyaxon={{ polyaxon }} \
-                         --gpu={{ gpu }} \
-                         --notifications={{ notifications }} \
-                         --tensorboard={{tensorb}}
+                         --outputs-path=$POLYAXON_RUN_OUTPUTS_PATH \ 
+                         -p \
+                         -g \
+                         -n \
+                         -t 
+                         #-m
 

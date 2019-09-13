@@ -1,3 +1,4 @@
+opencv-python
 Cython==0.29.13
 pushbullet.py==0.11.0
 torch
@@ -11,3 +12,4 @@ tqdm==4.35.0
 scipy==1.3.1
 Pillow==6.1.0
 polyaxon-client==0.5.6
+

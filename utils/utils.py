@@ -1,8 +1,11 @@
+import os
 import sys
 import random
 import numpy as np
 import PIL.Image
 import cv2
+import torch
+from torchvision.utils import save_image
 
 def get_square(img, pos):
     """Extract a left or a right square from ndarray shape : (H, W, C))"""
@@ -43,10 +46,6 @@ def only_resize(pilimg, final_height= (224,224)):
     # print('-----------ONly resize: Label resized shape:', img.shape)
     return img
 
-def only_resizeCV(cvImage, w=224,h=224):
-    img = cv2.resize(cvImage,(w,h))
-    return img 
-
 def batch(iterable, batch_size):
     """Yields lists by batch"""
     b = []
@@ -83,6 +82,17 @@ def split_train_val(dataset, expositions=15,val_percent=0.20):
 def normalize(x):
     return x / 255
 
+# CV2 utilities
+def only_resizeCV(cvImage, w=224,h=224):
+    img = cv2.resize(cvImage,(w,h))
+    return img 
+def cv2torch(np_img):
+    rgb = np_img[:, :, (2, 1, 0)]
+    return torch.from_numpy(rgb.swapaxes(1, 2).swapaxes(0, 1))
+
+def map_range(x, low=0, high=1):
+    return np.interp(x, [x.min(), x.max()], [low, high]).astype(x.dtype)
+
 def merge_masks(img1, img2, full_w):
     h = img1.shape[0]
 
@@ -92,6 +102,28 @@ def merge_masks(img1, img2, full_w):
 
     return new
 
+def check_dir (dir_path ):
+    dir_exists = False
+    if os.path.isdir(dir_path):
+        dir_exists = True
+    else:
+        try:
+            os.mkdir(dir_path)
+        except OSError:
+            print ("Creation of the directory %s failed" % dir_path)
+            dir_exists = False
+        else:
+            dir_exists = True
+            print ("Successfully created the directory %s " % dir_path)
+    return dir_exists 
+
+def saveTocheckpoint(folder,experiment_name,epoch,input_img,grnd_img,pred_img):
+    dir_path = path = os.path.join(folder,experiment_name)
+    print('dir_path', dir_path)
+    if check_dir(dir_path): 
+        file_name  = dir_path + '/epoch{}'.format(epoch+1) + '.png'  
+        e_imgs = [input_img, grnd_img, input_img]
+        save_image(e_imgs, file_name,nrow=3)
 
 # credits to https://stackoverflow.com/users/6076729/manuel-lagunas
 def rle_encode(mask_image):

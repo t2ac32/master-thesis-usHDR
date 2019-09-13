@@ -19,37 +19,33 @@ import cv2
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+
+
 try:
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
     tb = True
+    print('Using Tensorboard in load.py')
 except ImportError:
-    print('Counld not Import module Tensorboard')
-    tb = False
+    print('Counld not Import Tensorboard')
     try: 
         from tensorboardX import SummaryWriter
         writer = SummaryWriter()
         tb = True
+        print('Using Tensorboard X')
     except ImportError:
-        print('Could not import TensorboardX')
+        print('Could not import Tensorboard X')
         tb = False
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter()
-    
-except ImportError:
-    print('Could not load module Tensorboard')
     
 
-from .utils import resize_and_crop, get_square, normalize, hwc_to_chw, only_resize, only_resizeCV
+from .utils import resize_and_crop, get_square, normalize, hwc_to_chw, only_resize, only_resizeCV, map_range, cv2torch
 
 formatter = "{:02d}".format
 tensorboard= tb
 def get_ids(dir):
     """Returns a list of the ids in the directory"""
     """ Remove value x to get full list of ids, now just gets 1901 minus x where x [x:] """
-    return (f[:-4]  for f in os.listdir(dir)[1801:]) #[1801:]
+    return (f[:-4]  for f in os.listdir(dir)[1851:]) #[1801:]
 
 def split_ids(ids, n=2):
     """Split each id in n, creating n tuples (id, k) for each id"""
@@ -70,16 +66,18 @@ def get_hdr_label(id, dir, suffix):
     img = cv2.imread(img_name, -1) #flags = cv2.IMREAD_ANYDEPTH
     img = only_resizeCV(img,w=224,h=224)  
     img = np.asarray(img, dtype=np.float32)
+    #img = map_range(img)
+    torch_hdr = cv2torch(img)
     '''
     # WHEN USING TONEMAP.PNG (do not change axis this are in CHW form already)
     img = Image.open(img_name)   
     img = only_resize(img,(224,224))
     img = np.expand_dims(img, axis=0)
-    print('HDR max:', np.amax(img))
-    print('HDR min:', np.amin(img))
     '''
-    #print('HDR shape:',img.shape)
-    return img
+    #print('HDR max:', np.amax(img))
+    #print('HDR min:', np.amin(img))
+    #print('HDR shape:',torch_hdr.shape)
+    return torch_hdr
 
 def get_ldr(id, dir, suffix,exposition_num): 
     # print('Getting set: ',id)
@@ -88,7 +86,6 @@ def get_ldr(id, dir, suffix,exposition_num):
     img = Image.open(img_name)   
     img = only_resize(img,(224,224))
     #print('ldr shape; ', img.shape)
-
     #print('ldr max:', np.amax(img))
     
     ''' Array must be:
@@ -116,7 +113,6 @@ def get_imgs_and_masks(id, dir_img, dir_mask, exposition_num):
     #imgs_normalized = switch_and_normalize(imgs)
     hdr_suffix =  'stack_hdr_image.hdr' #'hdrReinhard_local.png'
     mask = get_hdr_label(id, dir_mask, hdr_suffix)
-    mask = hwc_to_chw(mask)
     return imgs_normalized, mask
 
 
@@ -138,8 +134,7 @@ class HdrDataset(Dataset):
         self.dir_mask = dir_mask
         self.expositions = expositions
         self.transform = transform
-        
-
+       
     def __len__(self):
         return len(self.ids)
 
@@ -159,12 +154,6 @@ class HdrDataset(Dataset):
         tensor_y = torch.Tensor(target)   
         sample = {'input': tensor_x, 'target': tensor_y}
         #print(idx, sample['input'].size(), sample['target'].size())
-        
-        if idx == 0:
-            if tensorboard:
-                print('saving a sample {0:}: input,target'.format(img_id))
-                writer.add_image('sample inputs', image, 0, dataformats='NCHW')
-                writer.add_image('sample target', target, 0,dataformats='CHW')
 
         if self.transform:
             sample = self.transform(sample)

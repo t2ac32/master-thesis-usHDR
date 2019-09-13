@@ -34,6 +34,8 @@ polyaxon config set --host=10.23.0.18 --port 31811
 #### Check polyaxonfile.yml
 ```
 polyaxon check -f polyaxonfile.yaml
+upload project:
+polyaxon run -f polyaxonfile.yaml -u -l
 ```
 where
 - -u: upload/update project
