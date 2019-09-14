@@ -338,14 +338,16 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
     val_data_loader = DataLoader(val_dataset,batch_size=batch_size,shuffle=True)
     
     for epoch in range(epochs):
-        print('-' * 50)
-        print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
+        print('\n')
+        print('{}{}{}'.format('+', '=' * 78 , '+'))       
+        print('| Starting epoch {}/{}. {}'.format(epoch + 1, epochs,(' '*57) + '|'))
+        print('{}{}{}'.format('|', '-' * 78 , '|')) 
         begin_of_epoch = time.time()
+        tot_steps = math.trunc(N_train/batch_size)
         net.train()
         train_loss = 0
         val_loss = 0
         step = 0
-
         for i, b in enumerate(train_data_loader):
             step += 1
             imgs, true_masks, imgs_ids = b['input'], b['target'], b['id'] 
@@ -358,7 +360,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                 imgs = imgs.cuda()
                 true_masks = true_masks.cuda()
             else:
-                print('GPU not available')
+                print('| GPU not available')
             
             # Predicted mask images
             optimizer.zero_grad()
@@ -381,11 +383,11 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
             # Save a sample of input, output prediction on the last step - 2 of the epoch
             
             if step==1 or step % logg_freq == 0: 
-                print('Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Val Loss:{3:.6f}'.format(step,cost, train_loss,val_loss))   
+                print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Val Loss:{3:.6f}'.format(step,cost, train_loss,val_loss))   
             
                
             #Last Step
-            if step == math.trunc(N_train/batch_size):
+            if step ==  math.trunc(tot_steps):
                 val_loss, val_sample= eval_hdr_net(net, val_data_loader, criterion, gpu,
                                                    batch_size,
                                                    expositions_num=15, tb=tb)
@@ -399,6 +401,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                                      train_sample[1],
                                      train_sample[2])
                 if val_sample:
+                    
                     val_exp_name = 'Val_' + experiment_name
                     val_sample_name   = val_sample[0]
                     saveTocheckpoint(dir_checkpoints, val_exp_name, val_sample_name, epoch,
@@ -407,7 +410,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                                          val_sample[3])
 
                 if tb:
-                    print('saving train step {0:} sample : input,target & pred'.format(step))
+                    print('| saving train step {0:} sample : input,target & pred'.format(step))
                     grid = torchvision.utils.make_grid(train_sample,nrow=3)
                     writer.add_image('train_sample', grid, 0)
                         
@@ -416,12 +419,14 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                 writer.add_scalar('training_loss: ', train_loss, epoch )
                 writer.add_scalar('validation_loss', val_loss, epoch )
 
-        print('-' * 15)
-        print('Epoch {0:} finished !'.format(epoch + 1))
-        print('Summary: Train Loss:{0:}, Val Loss:{1:}'.format(train_loss, val_loss))
+        print('{}{}{}'.format('+', '=' * 78 , '+'))
+        print('| {0:} Epoch {1:} finished ! {2:}|'.format(' '*28 ,(epoch + 1),' '*29 ))
+        print('{}{}{}'.format('+', '-' * 78 , '+'))
+        print('| Summary: Train Loss:{0:0.07}, Val Loss:{1:}'.format(train_loss, val_loss))
         time_epoch = time.time() - begin_of_epoch 
-        print('Epoch ETC: {:.0f}m {:.0f}s'.format(time_epoch // 60, time_epoch % 60))   
-        print('-' * 15)
+        print('| Epoch ETC: {:.0f}m {:.0f}s'.format(time_epoch // 60, time_epoch % 60))   
+        print('{}{}{}'.format('+', '=' * 78 , '+'))
+        
                 
         # Training and validation loss for Tensorboard
         #file_writer.add_summary(valid_summary, step)
@@ -431,7 +436,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
             torch.save(net.state_dict(),
                        dir_checkpoints + 'CP{}.pth'.format(epoch + 1))
             print('Checkpoint {} saved !'.format(epoch + 1))
-
+    print('>' * 80)
     time_elapsed = time.time() - since   
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))     
     if tb:
@@ -450,6 +455,7 @@ def eval_hdr_net(net, dataloader,criterion, gpu=False,
     tot_loss = 0
     step = 0
     N_val =  len(val_data_loader)
+    tot_steps = N_val/batch_size
     for i, b in enumerate(val_data_loader):
         step += 1
         imgs, true_masks, imgs_ids = b['input'], b['target'], b['id']
@@ -458,23 +464,19 @@ def eval_hdr_net(net, dataloader,criterion, gpu=False,
         #true_mask = b[1]
         #img = torch.from_numpy(img).unsqueeze(0)
         #true_mask = torch.from_numpy(true_mask).unsqueeze(0)
-        print('val img shape:', imgs.shape)
-        print('val true shape:', true_masks.shape)
         if gpu:
             imgs = imgs.cuda()
             true_masks = true_masks.cuda()
 
         pred = net(imgs)
-
-        print('val pred shape:', pred.shape)  
         #cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu, tb=tb)
         cost = criterion(pred,true_masks)
         tot_loss += cost.item()
         
         val_sample = []
         # Last - 1 step
-        if step == math.trunc(N_val/batch_size)- 2:
-            print (imgs.size(0))
+        if step == math.trunc(N_val/batch_size):
+            print('filling val sample')
             num_in_batch = random.randrange(imgs.size(0))
             img_id = imgs_ids[num_in_batch]
             img_s  = imgs[num_in_batch]

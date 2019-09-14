@@ -119,7 +119,7 @@ def check_dir (dir_path ):
 
 def saveTocheckpoint(folder,experiment_name,img_id,epoch,input_img,grnd_img,pred_img):
     dir_path = path = os.path.join(folder,experiment_name)
-    print('dir_path', dir_path)
+    #print('dir_path', dir_path)
    
     if check_dir(dir_path): 
         file_name  = dir_path + '/epoch{0:02d}_{1:}'.format(epoch+1,img_id) + '.png'  
