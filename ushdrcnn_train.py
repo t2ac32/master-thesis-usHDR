@@ -386,21 +386,30 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                
             #Last Step
             if step == math.trunc(N_train/batch_size):
-                val_loss = eval_hdr_net(net, val_data_loader, criterion, gpu,
+                val_loss, val_sample= eval_hdr_net(net, val_data_loader, criterion, gpu,
                                                    batch_size,
                                                    expositions_num=15, tb=tb)
-                num_in_batch = random.randrange(batch_size)
-                sample_name = imgs_ids[num_in_batch]
-                saveTocheckpoint(dir_checkpoints, experiment_name,sample_name, epoch,
-                                     imgs[num_in_batch],
-                                     true_masks[num_in_batch],
-                                     prediction[num_in_batch])
+                num_in_batch = random.randrange(imgs.size(0))
+                train_sample_name = imgs_ids[num_in_batch]
+                train_sample = [imgs[num_in_batch],true_masks[num_in_batch], prediction[num_in_batch]]
+
+                t_exp_name = 'Train_' + experiment_name
+                saveTocheckpoint(dir_checkpoints, t_exp_name, train_sample_name, epoch,
+                                     train_sample[0],
+                                     train_sample[1],
+                                     train_sample[2])
+                if val_sample:
+                    val_exp_name = 'Val_' + experiment_name
+                    val_sample_name   = val_sample[0]
+                    saveTocheckpoint(dir_checkpoints, val_exp_name, val_sample_name, epoch,
+                                         val_sample[1],
+                                         val_sample[2],
+                                         val_sample[3])
+
                 if tb:
-                    
-                        print('saving train step {0:} sample : input,target & pred'.format(step))
-                        train_sample = [imgs[0],true_masks[0], prediction[0]]   
-                        grid = torchvision.utils.make_grid(train_sample,nrow=3)
-                        writer.add_image('train_sample', grid, 0)
+                    print('saving train step {0:} sample : input,target & pred'.format(step))
+                    grid = torchvision.utils.make_grid(train_sample,nrow=3)
+                    writer.add_image('train_sample', grid, 0)
                         
         
         if tb:
@@ -440,26 +449,40 @@ def eval_hdr_net(net, dataloader,criterion, gpu=False,
     net.eval()
     tot_loss = 0
     step = 0
+    N_val =  len(val_data_loader)
     for i, b in enumerate(val_data_loader):
         step += 1
-        imgs, true_masks = b['input'], b['target']
+        imgs, true_masks, imgs_ids = b['input'], b['target'], b['id']
             
         #img = b[0]
         #true_mask = b[1]
         #img = torch.from_numpy(img).unsqueeze(0)
         #true_mask = torch.from_numpy(true_mask).unsqueeze(0)
-        #print('val img shape:', img.shape)
-        #print('val true shape:', true_mask.shape)
+        print('val img shape:', imgs.shape)
+        print('val true shape:', true_masks.shape)
         if gpu:
             imgs = imgs.cuda()
             true_masks = true_masks.cuda()
 
-        pred = net(imgs)    
+        pred = net(imgs)
+
+        print('val pred shape:', pred.shape)  
         #cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu, tb=tb)
         cost = criterion(pred,true_masks)
         tot_loss += cost.item()
+        
+        val_sample = []
+        # Last - 1 step
+        if step == math.trunc(N_val/batch_size)- 2:
+            print (imgs.size(0))
+            num_in_batch = random.randrange(imgs.size(0))
+            img_id = imgs_ids[num_in_batch]
+            img_s  = imgs[num_in_batch]
+            gt_s   = true_masks[num_in_batch]
+            pred   = pred[num_in_batch]
+            val_sample = [img_id, img_s, gt_s, pred]
 
-    return tot_loss 
+    return tot_loss, val_sample
 
 def get_args():
     parser = OptionParser()

@@ -37,7 +37,7 @@ params:
   logg_freq: 15
   checkpoint: $POLYAXON_RUN_OUTPUTS_PATH
   #img_scale:
-  #momentum: 0.9
+  #momentum: 0.9 
   #log_interval: 100
   #batch_size_test: 15
   #val_percent=0.20,
