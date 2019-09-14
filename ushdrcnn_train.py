@@ -270,7 +270,7 @@ lambda_ir = 0.5
 print('setup finished')
 
 
-def train_net(net, epochs=5, batch_size=1, lr=0.01, val_percent=0.20,
+def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
               save_cp=False,
               gpu=False,
               img_scale=0.5,
@@ -279,10 +279,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.01, val_percent=0.20,
               use_notifications=False,
               polyaxon=False,
               outputs_path='checkpoints'):
-    
-    # Writer will output to ./runs/ directory by default
-        #train_summary = SummaryWriter()
-        #valid_summary = SummaryWriter()
+    logg_freq = 15
     # === Localize training data ===================================================
     if polyaxon:
         data_paths = get_data_paths()
@@ -376,8 +373,6 @@ def train_net(net, epochs=5, batch_size=1, lr=0.01, val_percent=0.20,
             cost.backward()
             optimizer.step()
 
-        
-        
             #print('>>>>>>>> Pred max: ', torch.max(prediction[0]))
             #masks_probs = F.sigmoid(prediction)
             #masks_probs_flat = masks_probs.view(-1)
@@ -397,17 +392,14 @@ def train_net(net, epochs=5, batch_size=1, lr=0.01, val_percent=0.20,
                         grid = torchvision.utils.make_grid(train_sample,nrow=3)
                         writer.add_image('train_sample', grid, 0)
                         save_step_sample = False
-
-            if 1:
-                val_loss = eval_hdr_net(net, val_data_loader, criterion, gpu,
+            
+            if step==1 or step % logg_freq == 0: 
+                print('Step: {0:}, cost:{1:}, R-Train Loss:{2:.9f}'.format(step,cost, train_loss))   
+                if 1:
+                    val_loss = eval_hdr_net(net, val_data_loader, criterion, gpu,
                                                        batch_size,
-                                                       expositions_num=15,
-                                                       tb=tb) 
-                if step==1 or step % 20 == 0: 
-                    print('Step: {0:}, cost:{1:}, R-Train Loss:{2:.9f}, R-Val Loss:{3:.6f}'.format(step,cost, train_loss, val_loss))   
-
-        train_loss = train_loss / N_train  
-        val_loss = val_loss / N_val 
+                                                       expositions_num=15, tb =tb)
+                print('Running Val Loss:{0:.6f}'.format(val_loss))  
         
         if tb:
                 writer.add_scalar('training_loss: ', train_loss, epoch )

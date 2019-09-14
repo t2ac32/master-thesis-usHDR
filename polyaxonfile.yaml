@@ -27,7 +27,7 @@ environment:
 params:
   epochs: 10
   batch_size: 15
-  lr: 0.001
+  lr: 0.00001
   save: False
   gpu: True
   notifications: True
