@@ -117,11 +117,12 @@ def check_dir (dir_path ):
             print ("Successfully created the directory %s " % dir_path)
     return dir_exists 
 
-def saveTocheckpoint(folder,experiment_name,epoch,input_img,grnd_img,pred_img):
+def saveTocheckpoint(folder,experiment_name,img_id,epoch,input_img,grnd_img,pred_img):
     dir_path = path = os.path.join(folder,experiment_name)
     print('dir_path', dir_path)
+   
     if check_dir(dir_path): 
-        file_name  = dir_path + '/epoch{}'.format(epoch+1) + '.png'  
+        file_name  = dir_path + '/epoch{0:02d}_{1:}'.format(epoch+1,img_id) + '.png'  
         e_imgs = [input_img, grnd_img, pred_img]
         save_image(e_imgs, file_name,nrow=3)
 

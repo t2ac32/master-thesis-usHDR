@@ -27,13 +27,14 @@ environment:
 params:
   epochs: 10
   batch_size: 15
-  lr: 0.00001
+  lr: 0.001
   save: False
   gpu: True
   notifications: True
   polyaxon: True
   expositions: 15
   tensor_b: True
+  logg_freq: 15
   checkpoint: $POLYAXON_RUN_OUTPUTS_PATH
   #img_scale:
   #momentum: 0.9
@@ -47,6 +48,7 @@ run:
                         --batch-size={{ batch_size }} \
                          --learning-rate={{ lr }} \
                          --expo-num={{expositions}} \
+                         --logg-freq={{logg_freq}} \
                          --outputs-path=$POLYAXON_RUN_OUTPUTS_PATH \ 
                          -p \
                          -g \

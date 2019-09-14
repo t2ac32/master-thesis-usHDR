@@ -86,7 +86,7 @@ def train_net(net,
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+              
         print('Epoch finished ! Loss: {}'.format(epoch_loss / i))
 
         if 1:

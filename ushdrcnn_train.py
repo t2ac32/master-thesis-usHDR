@@ -275,11 +275,12 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
               gpu=False,
               img_scale=0.5,
               expositions_num=15,
+              logg_freq = 15,
               tb=False,
               use_notifications=False,
               polyaxon=False,
               outputs_path='checkpoints'):
-    logg_freq = 15
+    
     # === Localize training data ===================================================
     if polyaxon:
         data_paths = get_data_paths()
@@ -341,17 +342,13 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
         begin_of_epoch = time.time()
         net.train()
-            # reset the generators
-            #train = get_imgs_and_masks(iddataset['train'], dir_compressions, dir_mask, img_scale, expositions_num)
-            #val   = get_imgs_and_masks(iddataset['val'], dir_compressions, dir_mask, img_scale,expositions_num)
-
         train_loss = 0
+        val_loss = 0
         step = 0
-        save_step_sample = True
 
         for i, b in enumerate(train_data_loader):
             step += 1
-            imgs, true_masks = b['input'], b['target']
+            imgs, true_masks, imgs_ids = b['input'], b['target'], b['id'] 
             #print(i, b['input'].size(), b['target'].size())
             #input: [15, 3, 224, 224]), target: [15, 3, 224, 224]
             #print('>>>>>>> Input max: ' , torch.max(imgs[0]))
@@ -369,7 +366,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
             #cost, cost_input_output = Hdr_loss(imgs, true_masks, prediction, sep_loss=False, gpu=gpu, tb=tb)
             cost = criterion(prediction,true_masks)
             #loss is torch tensor
-            train_loss += cost.item() * imgs.size(0)
+            train_loss += cost.item()
             cost.backward()
             optimizer.step()
 
@@ -382,24 +379,29 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
             # Ground Truth images of masks
             #true_masks_flat = true_masks.view(-1)
             # Save a sample of input, output prediction on the last step - 2 of the epoch
+            
+            if step==1 or step % logg_freq == 0: 
+                print('Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Val Loss:{3:.6f}'.format(step,cost, train_loss,val_loss))   
+            
+               
+            #Last Step
             if step == math.trunc(N_train/batch_size):
-                saveTocheckpoint(dir_checkpoints, experiment_name, epoch,
-                                     imgs[0],true_masks[0],prediction[0])
+                val_loss = eval_hdr_net(net, val_data_loader, criterion, gpu,
+                                                   batch_size,
+                                                   expositions_num=15, tb=tb)
+                num_in_batch = random.randrange(batch_size)
+                sample_name = imgs_ids[num_in_batch]
+                saveTocheckpoint(dir_checkpoints, experiment_name,sample_name, epoch,
+                                     imgs[num_in_batch],
+                                     true_masks[num_in_batch],
+                                     prediction[num_in_batch])
                 if tb:
-                    if save_step_sample:
+                    
                         print('saving train step {0:} sample : input,target & pred'.format(step))
                         train_sample = [imgs[0],true_masks[0], prediction[0]]   
                         grid = torchvision.utils.make_grid(train_sample,nrow=3)
                         writer.add_image('train_sample', grid, 0)
-                        save_step_sample = False
-            
-            if step==1 or step % logg_freq == 0: 
-                print('Step: {0:}, cost:{1:}, R-Train Loss:{2:.9f}'.format(step,cost, train_loss))   
-                if 1:
-                    val_loss = eval_hdr_net(net, val_data_loader, criterion, gpu,
-                                                       batch_size,
-                                                       expositions_num=15, tb =tb)
-                print('Running Val Loss:{0:.6f}'.format(val_loss))  
+                        
         
         if tb:
                 writer.add_scalar('training_loss: ', train_loss, epoch )
@@ -455,7 +457,7 @@ def eval_hdr_net(net, dataloader,criterion, gpu=False,
         pred = net(imgs)    
         #cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu, tb=tb)
         cost = criterion(pred,true_masks)
-        tot_loss += cost.item()*imgs.size(0)
+        tot_loss += cost.item()
 
     return tot_loss 
 
@@ -468,6 +470,8 @@ def get_args():
                       default=False, help='load file model')
     parser.add_option('-e', '--epochs', dest='epochs', default=5, type='int',
                       help='number of epochs')
+    parser.add_option('-f', '--logg-freq', dest='frequency', default=15,
+                      type='int', help='requency for loggind data to terminal')
     parser.add_option('-g', '--gpu', action='store_true', dest='gpu',
                       default=False, help='use cuda')
     parser.add_option('-l', '--learning-rate', dest='lr', default=0.1,
@@ -519,6 +523,7 @@ if __name__ == '__main__':
                   gpu=args.gpu,
                   img_scale=args.scale,
                   expositions_num= args.expositions,
+                  logg_freq=args.frequency,
                   tb=args.tensorboard,
                   use_notifications=args.pushbullet,
                   polyaxon=args.polyaxon,
