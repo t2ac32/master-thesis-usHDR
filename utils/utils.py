@@ -110,15 +110,15 @@ def check_dir (dir_path ):
         try:
             os.mkdir(dir_path)
         except OSError:
-            print ("Creation of the directory %s failed" % dir_path)
+            #print ("Creation of the directory %s failed" % dir_path)
             dir_exists = False
         else:
             dir_exists = True
-            print ("Successfully created the directory %s " % dir_path)
+            #print ("Successfully created the directory %s " % dir_path)
     return dir_exists 
 
 def saveTocheckpoint(folder,experiment_name,img_id,epoch,input_img,grnd_img,pred_img):
-    dir_path = path = os.path.join(folder,experiment_name)
+    dir_path = os.path.join(folder,experiment_name)
     #print('dir_path', dir_path)
    
     if check_dir(dir_path): 

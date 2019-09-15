@@ -21,6 +21,7 @@ from eval import eval_net
 from unet import UNet
 
 from pushbullet import Pushbullet
+from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, exist_program, HdrDataset, saveTocheckpoint
 
 try:
     print('Using Tensorboard in train.py')
@@ -32,10 +33,10 @@ except ImportError:
         print('Using Tensorboard X')
         from tensorboardX import SummaryWriter
         writer = SummaryWriter()
+        experiment = Experiment()
     except ImportError:
         print('Could not import TensorboardX')
 
-from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, exist_program, HdrDataset, saveTocheckpoint
 # Setup date/ time
 currentDT = datetime.datetime.now()
 
@@ -388,9 +389,6 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                
             #Last Step
             if step ==  math.trunc(tot_steps):
-                val_loss, val_sample= eval_hdr_net(net, val_data_loader, criterion, gpu,
-                                                   batch_size,
-                                                   expositions_num=15, tb=tb)
                 num_in_batch = random.randrange(imgs.size(0))
                 train_sample_name = imgs_ids[num_in_batch]
                 train_sample = [imgs[num_in_batch],true_masks[num_in_batch], prediction[num_in_batch]]
@@ -400,14 +398,12 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                                      train_sample[0],
                                      train_sample[1],
                                      train_sample[2])
-                if val_sample:
+                
+                val_loss = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
+                                                    criterion, epoch, gpu,
+                                                    batch_size,
+                                                    expositions_num=15, tb=tb)
                     
-                    val_exp_name = 'Val_' + experiment_name
-                    val_sample_name   = val_sample[0]
-                    saveTocheckpoint(dir_checkpoints, val_exp_name, val_sample_name, epoch,
-                                         val_sample[1],
-                                         val_sample[2],
-                                         val_sample[3])
 
                 if tb:
                     print('| saving train step {0:} sample : input,target & pred'.format(step))
@@ -416,8 +412,13 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                         
         
         if tb:
+                train_loss = (train_loss/N_train)
+                val_loss   = (val_loss /N_val)
                 writer.add_scalar('training_loss: ', train_loss, epoch )
                 writer.add_scalar('validation_loss', val_loss, epoch )
+                if polyaxon:
+                    experiment.log_metrics(training_loss=train_loss)
+                    experiment.log_metrics(validation_loss=val_loss)
 
         print('{}{}{}'.format('+', '=' * 78 , '+'))
         print('| {0:} Epoch {1:} finished ! {2:}|'.format(' '*28 ,(epoch + 1),' '*29 ))
@@ -446,17 +447,20 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
         push = pb.push_note("usHDR: Finish", end_msg)
     
 
-def eval_hdr_net(net, dataloader,criterion, gpu=False,
+def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoch, gpu=False,
               batch_size=1,
               expositions_num=15, tb=False):
     """Evaluation without the densecrf with the dice coefficient"""
+
     val_data_loader = dataloader
     net.eval()
     tot_loss = 0
     step = 0
     N_val =  len(val_data_loader)
     tot_steps = N_val/batch_size
+
     for i, b in enumerate(val_data_loader):
+        
         step += 1
         imgs, true_masks, imgs_ids = b['input'], b['target'], b['id']
             
@@ -472,19 +476,21 @@ def eval_hdr_net(net, dataloader,criterion, gpu=False,
         #cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu, tb=tb)
         cost = criterion(pred,true_masks)
         tot_loss += cost.item()
-        
-        val_sample = []
+               
         # Last - 1 step
-        if step == math.trunc(N_val/batch_size):
-            print('filling val sample')
+        if step == math.trunc(tot_steps):
             num_in_batch = random.randrange(imgs.size(0))
-            img_id = imgs_ids[num_in_batch]
+            val_sample_name = imgs_ids[num_in_batch]
             img_s  = imgs[num_in_batch]
             gt_s   = true_masks[num_in_batch]
             pred   = pred[num_in_batch]
-            val_sample = [img_id, img_s, gt_s, pred]
-
-    return tot_loss, val_sample
+            val_exp_name = 'Val_' + experiment_name
+            saveTocheckpoint(dir_checkpoints, val_exp_name, val_sample_name, epoch,
+                            img_s,
+                            gt_s,
+                            pred)
+            
+    return tot_loss
 
 def get_args():
     parser = OptionParser()
