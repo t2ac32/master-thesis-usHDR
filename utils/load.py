@@ -19,24 +19,6 @@ import cv2
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-
-
-try:
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter()
-    tb = True
-    print('Using Tensorboard in load.py')
-except ImportError:
-    print('Counld not Import Tensorboard')
-    try: 
-        from tensorboardX import SummaryWriter
-        writer = SummaryWriter()
-        tb = True
-        print('Using Tensorboard X')
-    except ImportError:
-        print('Could not import Tensorboard X')
-        tb = False
-
 from .utils import resize_and_crop, get_square, normalize, hwc_to_chw, only_resize, only_resizeCV, map_range, cv2torch
 
 formatter = "{:02d}".format

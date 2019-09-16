@@ -32,7 +32,8 @@ except ImportError:
     try: 
         print('Using Tensorboard X')
         from tensorboardX import SummaryWriter
-        writer = SummaryWriter()
+        outputs_path = get_outputs_path()
+        writer = SummaryWriter(outputs_path)
         experiment = Experiment()
     except ImportError:
         print('Could not import TensorboardX')
@@ -307,7 +308,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
     print('Dataset_dir' , dataSets_dir)
     print('Outputs_path', dir_checkpoints)
     experiment_id = datetime.datetime.now().strftime('%d%m_%H%M_')
-    experiment_name = 'ExpamdNetLoss_{}_bs{}_lr{}_exps{}'.format(experiment_id,batch_size,lr,expositions_num)
+    experiment_name = 'MSELoss_{}_bs{}_lr{}_exps{}'.format(experiment_id,batch_size,lr,expositions_num)
     dir_img = os.path.join(dataSets_dir, 'Org_images/')
     dir_compressions = os.path.join(dataSets_dir, 'c_images/')
     dir_mask = os.path.join(dataSets_dir, 'c_images/')
@@ -324,12 +325,13 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
     #    momentum=0.9,
     #    weight_decay=0.0005)
 
+    #=====CHOOSE Loss Criterion=============================================================
+    criterion = nn.MSELoss()
+    #criterion = ExpandNetLoss()
     optimizer = optim.Adagrad(net.parameters(),
                               lr=lr,
                               weight_decay=0.0005)
-    # Binary cross entropy
-    #criterion = nn.MSELoss()
-    criterion = ExpandNetLoss()
+   
     since = time.time()
     print('''
         Training SETUP:

@@ -139,3 +139,7 @@ http://cluster.ifl:31811
 		| ----------------------|-----------------------------------------------|
 
 
+
+### Interesting links:
+
+https://machinelearningmastery.com/learning-curves-for-diagnosing-machine-learning-model-performance/
