@@ -27,14 +27,14 @@ environment:
 params:
   epochs: 64
   batch_size: 15
-  lr: 0.001
+  lr: 0.0001
   save: False
   gpu: True
   notifications: True
   polyaxon: True
   expositions: 15
   tensor_b: True
-  logg_freq: 15
+  logg_freq: 100
   checkpoint: $POLYAXON_RUN_OUTPUTS_PATH
   #img_scale:
   #momentum: 0.9 

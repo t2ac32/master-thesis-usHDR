@@ -58,6 +58,18 @@ sy = 224
 # log_dir = os.path.join(output_dir, "logs")
 # im_dir = os.path.join(output_dir, "im")
 
+# =========HDR EpxandNet loss =============================================================
+
+class ExpandNetLoss(nn.Module):
+    def __init__(self, loss_lambda=5):
+        super(ExpandNetLoss, self).__init__()
+        self.similarity = torch.nn.CosineSimilarity(dim=1, eps=1e-20)
+        self.l1_loss = nn.L1Loss()
+        self.loss_lambda = loss_lambda
+
+    def forward(self, x, y):
+        cosine_term = (1 - self.similarity(x, y)).mean()
+        return self.l1_loss(x, y) + self.loss_lambda * cosine_term
 
 # =========HDR loss =============================================================
 def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False, gpu=False, tb=False):
@@ -80,7 +92,7 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False, gpu=False, tb=Fal
     # TODO input_ and target might already be torch tensors
     #sinput_         = input_.permute((0, 2, 3, 1))
     # For masked loss, only using information near saturated image regions
-    thr       = 0.05 # Threshold for blending
+    thr       = 0.1 # Threshold for blending
     zero      = torch.DoubleTensor([0.0]).to(dtype=torch.double)
     thrTensor = torch.DoubleTensor([0.05]).to(dtype=torch.double)
     oneT      = torch.DoubleTensor([1.0]).to(dtype=torch.double)
@@ -294,7 +306,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
         dir_checkpoints = os.path.join(wk_dir, outputs_path)
     print('Dataset_dir' , dataSets_dir)
     print('Outputs_path', dir_checkpoints)
-    experiment_name = 'MSELoss_bs{}_lr{}_exps{}'.format(batch_size,lr,expositions_num)
+    experiment_id = datetime.datetime.now().strftime('%d%m_%H%M_')
+    experiment_name = 'ExpamdNetLoss_{}_bs{}_lr{}_exps{}'.format(experiment_id,batch_size,lr,expositions_num)
     dir_img = os.path.join(dataSets_dir, 'Org_images/')
     dir_compressions = os.path.join(dataSets_dir, 'c_images/')
     dir_mask = os.path.join(dataSets_dir, 'c_images/')
@@ -315,7 +328,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                               lr=lr,
                               weight_decay=0.0005)
     # Binary cross entropy
-    criterion = nn.MSELoss()
+    #criterion = nn.MSELoss()
+    criterion = ExpandNetLoss()
     since = time.time()
     print('''
         Training SETUP:
@@ -361,7 +375,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                 imgs = imgs.cuda()
                 true_masks = true_masks.cuda()
             else:
-                print('| GPU not available')
+                print(' GPU not available')
             
             # Predicted mask images
             optimizer.zero_grad()
@@ -416,9 +430,12 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                 val_loss   = (val_loss /N_val)
                 writer.add_scalar('training_loss: ', train_loss, epoch )
                 writer.add_scalar('validation_loss', val_loss, epoch )
+                writer.add_scalars('losses', { 'training_loss': train_loss,
+                                               'val_loss': val_loss}, epoch)
+               
                 if polyaxon:
-                    experiment.log_metrics(training_loss=train_loss)
-                    experiment.log_metrics(validation_loss=val_loss)
+                    experiment.log_metrics(training_loss=train_loss, validation_loss=val_loss)
+
 
         print('{}{}{}'.format('+', '=' * 78 , '+'))
         print('| {0:} Epoch {1:} finished ! {2:}|'.format(' '*28 ,(epoch + 1),' '*29 ))
@@ -457,7 +474,7 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
     tot_loss = 0
     step = 0
     N_val =  len(val_data_loader)
-    tot_steps = N_val/batch_size
+    tot_steps = N_val/batch_size                                                                                            
 
     for i, b in enumerate(val_data_loader):
         
@@ -550,6 +567,7 @@ if __name__ == '__main__':
         train_net(net=net,
                   epochs=args.epochs,
                   batch_size=args.batchsize,
+                  save_cp= args.save,
                   lr=args.lr,
                   gpu=args.gpu,
                   img_scale=args.scale,

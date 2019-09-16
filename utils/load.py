@@ -36,7 +36,6 @@ except ImportError:
     except ImportError:
         print('Could not import Tensorboard X')
         tb = False
-    
 
 from .utils import resize_and_crop, get_square, normalize, hwc_to_chw, only_resize, only_resizeCV, map_range, cv2torch
 
@@ -44,7 +43,7 @@ formatter = "{:02d}".format
 tensorboard= tb
 def get_ids(dir):
     """Returns a list of the ids in the directory"""
-    """ Remove value x to get full list of ids, now just gets 1901 minus x where x [x:] """
+    """ Remove value x to get full list of ids, now just gets 1901 minus x where x [x:] """                                                                                             
     return (f[:-4]  for f in os.listdir(dir)) #[1801:]
 
 def split_ids(ids, n=2):
