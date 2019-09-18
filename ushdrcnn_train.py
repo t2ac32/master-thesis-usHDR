@@ -14,6 +14,8 @@ from torch import optim
 from torch.utils.data import DataLoader
 import torchvision
 from torchvision import datasets, transforms
+#from torchsummary import summary
+
 
 from polyaxon_client.tracking import Experiment, get_data_paths, get_outputs_path
 
@@ -24,17 +26,17 @@ from pushbullet import Pushbullet
 from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, exist_program, HdrDataset, saveTocheckpoint
 
 try:
-    print('Using Tensorboard in train.py')
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
+    print('Using Tensorboard in train.py')
 except ImportError:
     print('Counld not Import module Tensorboard')
     try: 
-        print('Using Tensorboard X')
         from tensorboardX import SummaryWriter
         outputs_path = get_outputs_path()
         writer = SummaryWriter(outputs_path)
         experiment = Experiment()
+        print('Using Tensorboard X')
     except ImportError:
         print('Could not import TensorboardX')
 
@@ -42,9 +44,6 @@ except ImportError:
 currentDT = datetime.datetime.now()
 
 # FLAGS
-
-
-
 
 # === Settings =================================================================
 
@@ -285,7 +284,7 @@ print('setup finished')
 
 
 def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
-              save_cp=False,
+              save_cp=True,
               gpu=False,
               img_scale=0.5,
               expositions_num=15,
@@ -313,6 +312,9 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
     dir_compressions = os.path.join(dataSets_dir, 'c_images/')
     dir_mask = os.path.join(dataSets_dir, 'c_images/')
     
+    if tb:
+        writer.add_graph(net)
+        writer.close()
     # === Load Training/Validation data =====================================================
     ids = get_ids(dir_img)
     iddataset = split_train_val(ids, expositions_num, val_percent )
@@ -548,6 +550,7 @@ if __name__ == '__main__':
     args = get_args()
 
     net = UNet(n_channels=3, n_classes=3)
+    #summary(net, input_size=(3, 224, 224))
 
     if args.load:
         net.load_state_dict(torch.load(args.load))

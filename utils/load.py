@@ -22,11 +22,11 @@ from torch.utils.data import Dataset, DataLoader
 from .utils import resize_and_crop, get_square, normalize, hwc_to_chw, only_resize, only_resizeCV, map_range, cv2torch
 
 formatter = "{:02d}".format
-tensorboard= tb
+
 def get_ids(dir):
     """Returns a list of the ids in the directory"""
     """ Remove value x to get full list of ids, now just gets 1901 minus x where x [x:] """                                                                                             
-    return (f[:-4]  for f in os.listdir(dir)) #[1801:]
+    return (f[:-4]  for f in os.listdir(dir)[1801:]) #[1801:]
 
 def split_ids(ids, n=2):
     """Split each id in n, creating n tuples (id, k) for each id"""
