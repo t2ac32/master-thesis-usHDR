@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import torch
 import torch.nn.functional as F
-
+from torchsummary import summary
 import numpy as np
 from .unet_parts import *
 
@@ -43,3 +43,9 @@ class UNet(nn.Module):
         x = self.outc(x)
         return F.sigmoid(x)
 
+'''
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
+model = UNet(n_channels=3, n_classes=3).to(device)
+
+summary(model, input_size= (3,224,224))
+'''

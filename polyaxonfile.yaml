@@ -25,7 +25,7 @@ environment:
      requests: 1
      limits: 1
 params:
-  epochs: 64
+  epochs: 40
   batch_size: 15
   lr: 0.001
   save: True

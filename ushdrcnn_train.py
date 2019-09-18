@@ -14,7 +14,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 import torchvision
 from torchvision import datasets, transforms
-#from torchsummary import summary
+
 
 
 from polyaxon_client.tracking import Experiment, get_data_paths, get_outputs_path
@@ -26,17 +26,23 @@ from pushbullet import Pushbullet
 from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, exist_program, HdrDataset, saveTocheckpoint
 
 try:
+    print('LOading TEnsorboard')
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
     print('Using Tensorboard in train.py')
 except ImportError:
     print('Counld not Import module Tensorboard')
     try: 
+        print('loading tensorboard X')
         from tensorboardX import SummaryWriter
-        outputs_path = get_outputs_path()
-        writer = SummaryWriter(outputs_path)
-        experiment = Experiment()
-        print('Using Tensorboard X')
+        try:
+            outputs_path = get_outputs_path()
+            writer = SummaryWriter(outputs_path)
+            experiment = Experiment()
+            print('Using Tensorboard X')
+        except ImportError:
+            writer = SummaryWriter()
+            print('Using Tensorboard X')   
     except ImportError:
         print('Could not import TensorboardX')
 
@@ -272,16 +278,9 @@ def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False, gpu=False, tb=Fal
 
     return cost, cost_input_output
 # =====Learning parameters ======================================================
-#num_epochs = 100
-#start_step = 0.0
-#Learning_rate = 0.00005
-#batch_size = args.batchsize
-lambda_ir = 0.5
-#tran_size = 0.99
-#buffer_size = 256
-#rand_data = True
-print('setup finished')
 
+lambda_ir = 0.5
+print('setup finished')
 
 def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
               save_cp=True,
@@ -312,9 +311,10 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
     dir_compressions = os.path.join(dataSets_dir, 'c_images/')
     dir_mask = os.path.join(dataSets_dir, 'c_images/')
     
-    if tb:
-        writer.add_graph(net)
-        writer.close()
+    #if tb:
+        #dummy_input = torch.rand(1, 3, 128, 128)
+        #writer.add_graph(net, (dummy_input,))
+        #writer.close()
     # === Load Training/Validation data =====================================================
     ids = get_ids(dir_img)
     iddataset = split_train_val(ids, expositions_num, val_percent )
@@ -455,8 +455,9 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
         #file_writer.add_summary(train_summary, step)
 
         if save_cp:
+            model_path = os.path.join(dir_checkpoints, 'CP{}.pth'.format(epoch + 1))
             torch.save(net.state_dict(),
-                       dir_checkpoints + 'CP{}.pth'.format(epoch + 1))
+                       model_path)
             print('Checkpoint {} saved !'.format(epoch + 1))
     print('>' * 80)
     time_elapsed = time.time() - since   
@@ -550,8 +551,7 @@ if __name__ == '__main__':
     args = get_args()
 
     net = UNet(n_channels=3, n_classes=3)
-    #summary(net, input_size=(3, 224, 224))
-
+    
     if args.load:
         net.load_state_dict(torch.load(args.load))
         print('Model loaded from {}'.format(args.load))
