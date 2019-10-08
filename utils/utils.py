@@ -6,6 +6,8 @@ import PIL.Image
 import cv2
 import torch
 from torchvision.utils import save_image
+import sklearn
+from sklearn.model_selection import KFold
 
 def get_square(img, pos):
     """Extract a left or a right square from ndarray shape : (H, W, C))"""
@@ -68,6 +70,14 @@ def split_train_val(dataset, expositions=15,val_percent=0.20):
     v =  dataset[-n:]
     train = []
     val = []
+    '''
+    kf =KFold(n_splits=5)
+    kf.get_n_splits(ids)
+
+    for train_index, test_index in kf.split(train_dataset):
+        train_set, val_set =  ids(train_index), ids(test_index)
+    ''' 
+
 
     for im_id in t:
         for e in range(expositions):

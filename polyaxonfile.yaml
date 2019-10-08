@@ -1,7 +1,7 @@
 ---
 version: 1
 
-kind: experiment
+kind: experiment #group
 
 framework: pytorch
 
@@ -25,9 +25,9 @@ environment:
      requests: 1
      limits: 1
 params:
-  epochs: 40
+  lr:  0.001
+  epochs: 64
   batch_size: 15
-  lr: 0.001
   save: True
   gpu: True
   notifications: True
@@ -41,6 +41,7 @@ params:
   #log_interval: 100
   #batch_size_test: 15
   #val_percent=0.20,
+
               
 
 run:

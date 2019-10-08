@@ -1,4 +1,4 @@
-master-thesis-usHDR
+polyaxonmaster-thesis-usHDR
 
 # Deep learning HDR DATASET
 

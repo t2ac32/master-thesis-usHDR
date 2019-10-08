@@ -15,8 +15,8 @@ from torch.utils.data import DataLoader
 import torchvision
 from torchvision import datasets, transforms
 
-
-
+from psnrhvsm import *
+import pytorch_ssim
 from polyaxon_client.tracking import Experiment, get_data_paths, get_outputs_path
 
 from eval import eval_net
@@ -26,7 +26,7 @@ from pushbullet import Pushbullet
 from utils import get_ids, split_ids, split_train_val, get_imgs_and_masks, batch, exist_program, HdrDataset, saveTocheckpoint
 
 try:
-    print('LOading TEnsorboard')
+    print('Loading Tensorboard')
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
     print('Using Tensorboard in train.py')
@@ -78,211 +78,12 @@ class ExpandNetLoss(nn.Module):
         return self.l1_loss(x, y) + self.loss_lambda * cosine_term
 
 # =========HDR loss =============================================================
-def Hdr_loss(input_y, true_x, logits, eps=eps, sep_loss=False, gpu=False, tb=False):
 
-    in_y = input_y.permute(0 ,2 ,3 ,1).to(dtype=torch.double)
-    target = true_x.permute(0 ,2 ,3 ,1).to(dtype=torch.double)
-    y      = logits.permute(0, 2, 3, 1).to(dtype=torch.double)
-    #print('input y ' , in_y.shape)
-    #print('target', target.shape)
-    #print('y (logits)'     , y.shape)
-    '''
-        Args:
-                    true: a tensor of shape [B, 1, H, W].
-                    logits: a tensor of shape [B, C, H, W]. Corresponds to
-                            the raw output or logits of the model.
-                    eps: added to the denominator for numerical stability.
-        Remember: [batch_size, channels, height, width]
-    '''
-
-    # TODO input_ and target might already be torch tensors
-    #sinput_         = input_.permute((0, 2, 3, 1))
-    # For masked loss, only using information near saturated image regions
-    thr       = 0.1 # Threshold for blending
-    zero      = torch.DoubleTensor([0.0]).to(dtype=torch.double)
-    thrTensor = torch.DoubleTensor([0.05]).to(dtype=torch.double)
-    oneT      = torch.DoubleTensor([1.0]).to(dtype=torch.double)
-    if gpu:
-        zero      = zero.cuda()
-        thrTensor = thrTensor.cuda()
-        oneT      = oneT.cuda()
-
-    # REVISAR MASCARA
-    msk   = torch.max(in_y ,3)[0]
-    add   = torch.add(torch.sub(msk, oneT), thr)
-    div   = torch.div(add, thr)
-    th_op = torch.max(zero, div)
-    msk = torch.min(oneT, th_op )
-    msk = msk.expand(1,-1,-1, -1)
-    msk = msk.repeat(3,1,1,1)
-    msk = msk.permute(1,2,3,0)
-
-    '''
-    msk       = torch.max(in_y ,3)[0]
-    print('reduced_msk: ', msk.shape)
-    th        = torch.max(zeros, (msk - 1.0 + thr)/thr)
-    msk       = torch.min(oneT, th )
-    msk = msk.expand(1,-1,-1, -1)
-    msk = msk.permute(1,0,2,3)
-    msk = msk.repeat(1,3,1,1)
-    '''
-    if tb:
-        writer.add_images('loss_mask',msk,0, dataformats='NHWC')
-            
-    
-    y_log_    = torch.log(in_y + eps).to(dtype=torch.double)
-    x_log     = torch.log(torch.pow(target, 2.0 ) + eps)
-    # print('y_log_: ' ,y_log_.shape)
-    # print('x_log: ' ,x_log.shape)
-
-    # Loss separated into illumination and reflectance terms
-    if sep_loss:
-
-        filterx = np.zeros((1 ,1 ,3 ,1))
-        filterx[:, :, 0, 0] = 0.213
-        filterx[:, :, 1, 0] = 0.715
-        filterx[:, :, 2, 0] = 0.072
-        filterx = torch.from_numpy(filterx)
-        if gpu:filterx = filterx.cuda()
-
-        conv = torch.nn.Conv2d(1 ,1 ,1 , bias = False)
-        filterx = filterx.permute(3 ,2 ,0 ,1).cuda() #permute(0,3,1,2)
-        # print('filter: ', filterx.shape)
-        
-        ## y_lum_lin_ 
-        conv.weight = torch.nn.Parameter(filterx)
-        ##this y must be y_ input of network
-        z = in_y.permute(0,3,1,2)
-        l = conv(z)
-        #l = l.detach().numpy()
-        y_lum_lin_ = l.permute(0,2,3,1)
-        # print('input: ' ,in_y.shape)
-        # print('z: ', z.shape)
-        # print(l.shape)
-
-        ## y_lum_lin 
-        e = (torch.exp(y)) - eps
-        z = e.permute(0,3,1,2); #print('z: ', z.shape)
-        l_ = conv(z)
-        y_lum_lin = l_.permute(0,2,3,1)
-
-        ##x_lum_lin
-        z = target.permute(0,3,1,2); 
-        l_x = conv(z)
-        x_lum_lin = l_x.permute(0,2,3,1)
-
-        # print("y_lum_lin_:", y_lum_lin_.shape)
-        # print("y_lum_lin:", y_lum_lin.shape)
-        # print("x_lum_lin:", x_lum_lin.shape)
-
-        y_lum_ = torch.log(y_lum_lin_ + eps)
-        y_lum  = torch.log(y_lum_lin  + eps)
-        x_lum  = torch.log(x_lum_lin  + eps)
-        # print('y_lum_: ' ,y_lum_.shape)
-        # print('y_lum' ,y_lum.shape)
-        # print('x_lum' ,x_lum.shape)
-
-        # gaussian kernel
-        nsig = 2
-        filter_size = 13
-        interval = ( 2 *nsig + 1. ) /(filter_size)
-        ll = np.linspace(-nsig - interval /2., nsig + interval /2., filter_size +1)
-        kern1d = np.diff(st.norm.cdf(ll))
-        kernel_raw = np.sqrt(np.outer(kern1d, kern1d))
-        kernel = kernel_raw /kernel_raw.sum()
-
-        # Illumination, approximated by means of Gaussian filtering
-        weights_g = np.zeros((filter_size, filter_size, 1, 1))
-        weights_g[:, :, 0, 0] = kernel
-        weights_g = torch.from_numpy(weights_g)
-
-        padding_same = 6
-
-        # y_ill_ = torch.nn.Conv2d(y_lum_, weights_g, [1, 1, 1, 1], padding='SAME')
-        ill_conv = torch.nn.Conv2d(1,1,1 , padding=6, bias = False)
-        filterw = weights_g.permute(3,2,0,1)
-        if gpu:filterw = filterw.cuda() 
-        ill_conv.weight = torch.nn.Parameter(filterw)
-        ill_conv_in_ = y_lum_.permute(0,3,1,2)
-        ill_conv_in_ = ill_conv(ill_conv_in_)
-        y_ill_ = ill_conv_in_.permute(0,2,3,1)
-
-        #y_ill = torch.nn.Conv2d(y_lum, weights_g, [1, 1, 1, 1], padding='SAME')
-        ill_conv = torch.nn.Conv2d(1,1,1 , padding=6, bias = False)
-        filterw =  weights_g.permute(3,2,0,1)
-        if gpu:filterw = filterw.cuda()
-        ill_conv.weight = torch.nn.Parameter(filterw)
-        ill_conv_in_ = y_lum.permute(0,3,1,2);
-        ill_conv_in_ = ill_conv(ill_conv_in_)
-        y_ill = ill_conv_in_.permute(0,2,3,1)
-
-        # x_ill = torch.nn.Conv2d(x_lum, weights_g, [1, 1, 1, 1], padding='SAME')
-        ill_conv = torch.nn.Conv2d(1,1,1 , padding=6, bias = False)
-        filterw = weights_g.permute(3,2,0,1)
-        if gpu: filterw = filterw.cuda()
-        ill_conv.weight = torch.nn.Parameter(filterw)
-        ill_conv_in_ = x_lum.permute(0,3,1,2)
-        ill_conv_in_ = ill_conv(ill_conv_in_)
-        x_ill = ill_conv_in_.permute(0,2,3,1)
-
-        # print('y_ill_: ', y_ill_.shape)
-        # print('y_ill: ', y_ill.shape)
-        # print('x_ill: ', x_ill.shape)
-
-        # PYtorch convention of tensor: NxCx(H*W)
-        # Reflectance
-        y_ill_ = y_ill_.repeat(1, 1, 1, 3)
-        y_ill  = y_ill.repeat(1, 1, 1, 3)
-        x_refl = x_ill.repeat(1, 1, 1, 3)
-
-        y_refl_ = y_log_ - y_ill_  # tf.tile(y_ill_, [1,1,1,3])
-        y_refl  = y - y_ill
-        x_refl  = target - x_ill
-
-        # print(y_refl_.shape)
-        # print(y_refl.shape)
-        # print(x_refl.shape)
-
-        sub_yill    = torch.sub(y_ill, y_ill_)
-        square_yill = torch.mul(sub_yill ,sub_yill)
-
-        sub_refl    = torch.sub(y_refl ,y_refl_)
-        square_refl = torch.mul(sub_refl ,sub_refl)
-
-        sub_xyill    = torch.sub(x_ill, y_ill_)
-        square_xyill = torch.mul(sub_xyill ,sub_xyill)
-
-        sub_refl    = torch.sub(x_refl ,y_refl_)
-        square_refl = torch.mul(sub_refl ,sub_refl)
-
-        cost =              torch.mean((lambda_ir * square_yill + (1.0 - lambda_ir) * square_refl) * msk)
-        cost_input_output = torch.mean((lambda_ir * square_xyill + (1.0 - lambda_ir) * square_refl) * msk)
-        #print('cost: ', cost)
-        #print('cost_input_output', cost_input_output)
-    else:
-        #print('>>>>> y:', len(y.size()))
-        #print('>>>>> y_log_:', len(y_log_.size()))
-
-        out_sub_log = torch.mul(torch.sub(y, y_log_), msk)
-        sqr_of_log  = torch.pow(out_sub_log, 2.0)
-        cost        = torch.mean(sqr_of_log)
-        # print('>>>>> out_sub_log:', out_sub_log)
-        # print('>>>>> sqr_of_log:', sqr_of_log)
-        
-        #print('cost: ', cost)
-        # TODO test
-        trgt_sub_log = torch.mul(torch.sub(y_log_, x_log), msk)
-        trgt_square  = torch.pow(trgt_sub_log, 2.0)
-        cost_input_output = torch.mean(trgt_square)
-        #print('cost_input_output', cost_input_output)
-
-    return cost, cost_input_output
 # =====Learning parameters ======================================================
 
-lambda_ir = 0.5
 print('setup finished')
 
-def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
+def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambda=5,
               save_cp=True,
               gpu=False,
               img_scale=0.5,
@@ -306,7 +107,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
     print('Dataset_dir' , dataSets_dir)
     print('Outputs_path', dir_checkpoints)
     experiment_id = datetime.datetime.now().strftime('%d%m_%H%M_')
-    experiment_name = 'MSELoss_{}_bs{}_lr{}_exps{}'.format(experiment_id,batch_size,lr,expositions_num)
+    experiment_name = 'ExpandnetLoss_{}_bs{}_lr{}_exps{}'.format(experiment_id,batch_size,lr,expositions_num)
     dir_img = os.path.join(dataSets_dir, 'Org_images/')
     dir_compressions = os.path.join(dataSets_dir, 'c_images/')
     dir_mask = os.path.join(dataSets_dir, 'c_images/')
@@ -328,8 +129,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
     #    weight_decay=0.0005)
 
     #=====CHOOSE Loss Criterion=============================================================
-    criterion = nn.MSELoss()
-    #criterion = ExpandNetLoss()
+    #criterion = nn.MSELoss(reduction='mean')
+    criterion = ExpandNetLoss(loss_lambda=loss_lambda)
     optimizer = optim.Adagrad(net.parameters(),
                               lr=lr,
                               weight_decay=0.0005)
@@ -349,11 +150,11 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
     
     train_dataset = HdrDataset(iddataset['train'], dir_compressions, dir_mask,
                                expositions_num)
-    train_data_loader = DataLoader(train_dataset,batch_size=batch_size,shuffle=True)
-    
     val_dataset = HdrDataset(iddataset['val'], dir_compressions, 
                                          dir_mask,
                                          expositions_num)
+
+    train_data_loader = DataLoader(train_dataset,batch_size=batch_size,shuffle=True)
     val_data_loader = DataLoader(val_dataset,batch_size=batch_size,shuffle=True)
     
     for epoch in range(epochs):
@@ -365,8 +166,11 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
         tot_steps = math.trunc(N_train/batch_size)
         net.train()
         train_loss = 0
+        losses = []
         val_loss = 0
         step = 0
+        train_sample = []
+        train_acc = 0 
         for i, b in enumerate(train_data_loader):
             step += 1
             imgs, true_masks, imgs_ids = b['input'], b['target'], b['id'] 
@@ -386,8 +190,21 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
             prediction = net(imgs) #prediction shape: [B, 3, 224, 224]
             #cost, cost_input_output = Hdr_loss(imgs, true_masks, prediction, sep_loss=False, gpu=gpu, tb=tb)
             cost = criterion(prediction,true_masks)
+            
+            batch_acc = get_acc(true_masks,prediction,batch_size)
+
+            train_acc = train_acc + batch_acc   
+            '''
+            Compute psnrhvsm of
+            psnr ( input vs label ) = psnrTru
+            psnr ( input vs pred  ) = psnrPred
+            correct += (predicted == labels).sum().item()
+
+            '''
             #loss is torch tensor
-            train_loss += cost.item()
+            losses.append(cost.item())
+            
+            train_loss = np.mean(losses) 
             cost.backward()
             optimizer.step()
 
@@ -402,10 +219,10 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
             # Save a sample of input, output prediction on the last step - 2 of the epoch
             
             if step==1 or step % logg_freq == 0: 
-                print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Val Loss:{3:.6f}'.format(step,cost, train_loss,val_loss))   
-            
+                print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Train Acc:{3:.9f}'.format(step,cost, train_loss,train_acc/step)) 
+                
                
-            #Last Step
+            #Last Step of this Epoch
             if step ==  math.trunc(tot_steps):
                 num_in_batch = random.randrange(imgs.size(0))
                 train_sample_name = imgs_ids[num_in_batch]
@@ -417,21 +234,17 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
                                      train_sample[1],
                                      train_sample[2])
                 
-                val_loss = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
-                                                    criterion, epoch, gpu,
-                                                    batch_size,
-                                                    expositions_num=15, tb=tb)
-                    
-
                 if tb:
                     print('| saving train step {0:} sample : input,target & pred'.format(step))
                     grid = torchvision.utils.make_grid(train_sample,nrow=3)
                     writer.add_image('train_sample', grid, 0)
-                        
-        
+        if  epoch % 15 == 0: 
+            val_loss, val_acc = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
+                                    criterion, epoch, gpu,
+                                    batch_size,
+                                    expositions_num=15, tb=tb)
+
         if tb:
-                train_loss = (train_loss/N_train)
-                val_loss   = (val_loss /N_val)
                 writer.add_scalar('training_loss: ', train_loss, epoch )
                 writer.add_scalar('validation_loss', val_loss, epoch )
                 writer.add_scalars('losses', { 'training_loss': train_loss,
@@ -445,6 +258,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
         print('| {0:} Epoch {1:} finished ! {2:}|'.format(' '*28 ,(epoch + 1),' '*29 ))
         print('{}{}{}'.format('+', '-' * 78 , '+'))
         print('| Summary: Train Loss:{0:0.07}, Val Loss:{1:}'.format(train_loss, val_loss))
+        print('|          Train Acc :{0:0.07}, Val Acc :{1:}'.format(train_acc, val_acc))
         time_epoch = time.time() - begin_of_epoch 
         print('| Epoch ETC: {:.0f}m {:.0f}s'.format(time_epoch // 60, time_epoch % 60))   
         print('{}{}{}'.format('+', '=' * 78 , '+'))
@@ -465,7 +279,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,
     if tb:
         writer.close()
     if use_notifications:
-        end_msg = "train.py finisheed at: {}(".format(str(currentDT))
+        end_msg = "train.py finished at: {}(".format(str(datetime.datetime.now()))
         push = pb.push_note("usHDR: Finish", end_msg)
     
 
@@ -476,11 +290,11 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
 
     val_data_loader = dataloader
     net.eval()
-    tot_loss = 0
+    losses = []
     step = 0
     N_val =  len(val_data_loader)
     tot_steps = N_val/batch_size                                                                                            
-
+    tot_acc = 0
     for i, b in enumerate(val_data_loader):
         
         step += 1
@@ -496,23 +310,34 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
 
         pred = net(imgs)
         #cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu, tb=tb)
+
+        batch_acc = get_acc(true_masks,prediction,batch_size)
+        tot_acc = tot_acc + batch_acc   
+            
         cost = criterion(pred,true_masks)
-        tot_loss += cost.item()
-               
+        losses.append(cost.item())    
         # Last - 1 step
         if step == math.trunc(tot_steps):
             num_in_batch = random.randrange(imgs.size(0))
             val_sample_name = imgs_ids[num_in_batch]
             img_s  = imgs[num_in_batch]
             gt_s   = true_masks[num_in_batch]
-            pred   = pred[num_in_batch]
+            pred_img   = pred[num_in_batch]
             val_exp_name = 'Val_' + experiment_name
             saveTocheckpoint(dir_checkpoints, val_exp_name, val_sample_name, epoch,
                             img_s,
                             gt_s,
-                            pred)
+                            pred_img)
             
-    return tot_loss
+    return np.mean(losses),tot_acc
+
+def get_acc (masks,preds,batch_size):
+    batch_acc = 0 
+    for index in range(batch_size):
+        mask = masks[index].unsqueeze(0).cpu()
+        pred = preds[index].unsqueeze(0).cpu()
+        batch_acc += pytorch_ssim.ssim(mask, pred)
+    return batch_acc / batch_size
 
 def get_args():
     parser = OptionParser()
@@ -529,6 +354,8 @@ def get_args():
                       default=False, help='use cuda')
     parser.add_option('-l', '--learning-rate', dest='lr', default=0.1,
                       type='float', help='learning rate')
+    parser.add_option('-L', '--loss-lambda', dest='loss_lambda', default=5,
+                      type='float', help='Loss function lambda param')
     parser.add_option('-m', '--save-cp', dest='save',
                       default=False, help='save model')
     parser.add_option('-n', '--notifications', action='store_true', dest='pushbullet',
@@ -574,6 +401,7 @@ if __name__ == '__main__':
                   batch_size=args.batchsize,
                   save_cp= args.save,
                   lr=args.lr,
+                  loss_lambda=args.loss_lambda,
                   gpu=args.gpu,
                   img_scale=args.scale,
                   expositions_num= args.expositions,

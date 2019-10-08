@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import torch
 import torch.nn.functional as F
-from torchsummary import summary
+#from torchsummary import summary
 import numpy as np
 from .unet_parts import *
 
