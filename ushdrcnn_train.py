@@ -10,13 +10,18 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 from torch import optim
 from torch.utils.data import DataLoader
 import torchvision
 from torchvision import datasets, transforms
 
-from psnrhvsm import *
-import pytorch_ssim
+#### Accuracy measurements
+from psnrhvsm import psnrhvsm
+import pytorch_ssim  
+#from skimage.measure import compare_ssim as ssim
+
+
 from polyaxon_client.tracking import Experiment, get_data_paths, get_outputs_path
 
 from eval import eval_net
@@ -171,6 +176,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
         step = 0
         train_sample = []
         train_acc = 0 
+        val_acc = 0
+        model_acc = 0
         for i, b in enumerate(train_data_loader):
             step += 1
             imgs, true_masks, imgs_ids = b['input'], b['target'], b['id'] 
@@ -191,8 +198,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
             #cost, cost_input_output = Hdr_loss(imgs, true_masks, prediction, sep_loss=False, gpu=gpu, tb=tb)
             cost = criterion(prediction,true_masks)
             
-            batch_acc = get_acc(true_masks,prediction,batch_size)
-
+            #batch_acc = get_acc(true_masks,prediction,batch_size)
+            batch_acc = get_psnrhs(true_masks,prediction,batch_size)
             train_acc = train_acc + batch_acc   
             '''
             Compute psnrhvsm of
@@ -238,7 +245,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
                     print('| saving train step {0:} sample : input,target & pred'.format(step))
                     grid = torchvision.utils.make_grid(train_sample,nrow=3)
                     writer.add_image('train_sample', grid, 0)
-        if  epoch % 15 == 0: 
+        
+        if  epoch % 15 == 0 or epoch == epochs: 
             val_loss, val_acc = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
                                     criterion, epoch, gpu,
                                     batch_size,
@@ -268,7 +276,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
         #file_writer.add_summary(valid_summary, step)
         #file_writer.add_summary(train_summary, step)
 
-        if save_cp:
+        if save_cp and (val_acc > model_acc):
+            model_acc = val_acc
             model_path = os.path.join(dir_checkpoints, 'CP{}.pth'.format(epoch + 1))
             torch.save(net.state_dict(),
                        model_path)
@@ -311,7 +320,9 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
         pred = net(imgs)
         #cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu, tb=tb)
 
-        batch_acc = get_acc(true_masks,prediction,batch_size)
+        #batch_acc = get_acc(true_masks,pred,batch_size)
+        batch_acc = get_psnrhs(true_masks,pred,batch_size)
+            
         tot_acc = tot_acc + batch_acc   
             
         cost = criterion(pred,true_masks)
@@ -331,13 +342,34 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
             
     return np.mean(losses),tot_acc
 
-def get_acc (masks,preds,batch_size):
+def get_psnrhs(masks,preds,batch_size):
     batch_acc = 0 
+
+    if masks.size(0) < batch_size:
+        batch_size = masks.size(0)
+
     for index in range(batch_size):
-        mask = masks[index].unsqueeze(0).cpu()
-        pred = preds[index].unsqueeze(0).cpu()
-        batch_acc += pytorch_ssim.ssim(mask, pred)
+        mask = masks[index]
+        pred = preds[index]
+        p_hvs_m, p_hvs = psnrhvsm(mask, pred)
+        batch_acc += p_hvs_m
+
     return batch_acc / batch_size
+
+    
+def get_acc (masks,preds,batch_size):
+    mssim = 0 
+    if masks.size(0) < batch_size:
+        batch_size = masks.size(0)
+
+    for index in range(batch_size):
+
+        mask = Variable( masks[index].unsqueeze(0) )
+        pred = Variable( preds[index].unsqueeze(0) )
+        mssim += pytorch_ssim.ssim(mask, pred)
+        #mssim = ssim(mask,pred,multichannel=True,gaussian_weights=True)
+        
+    return mssim / batch_size
 
 def get_args():
     parser = OptionParser()
@@ -357,7 +389,7 @@ def get_args():
     parser.add_option('-L', '--loss-lambda', dest='loss_lambda', default=5,
                       type='float', help='Loss function lambda param')
     parser.add_option('-m', '--save-cp', dest='save',
-                      default=False, help='save model')
+                       default=False, help='save model')
     parser.add_option('-n', '--notifications', action='store_true', dest='pushbullet',
                       default=False, help='use pushbullet notifications')
     parser.add_option('-o', '--outputs-path', action= 'store',dest='outputs',

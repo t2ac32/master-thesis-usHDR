@@ -1,10 +1,18 @@
 # Generated with SMOP  0.41
 # psnrhvsm.m
+import numpy as np
+import torch 
+import scipy as sp
+from scipy.fftpack import dct, dctn, idctn
+from skimage.util.shape import view_as_windows
 
+def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
+    varargin = args
+    nargin = 2 + len(varargin)
+    verbose = True
+    p_hvs_m = 0 
+    p_hvs = 0
     
-def psnrhvsm(img1=None,img2=None,wstep=None,*args,**kwargs):
-    varargin = psnrhvsm.varargin
-    nargin = psnrhvsm.nargin
     '''
     ========================================================================
         
@@ -79,59 +87,87 @@ def psnrhvsm(img1=None,img2=None,wstep=None,*args,**kwargs):
     ========================================================================
     '''  
     if nargin < 2:
-        p_hvs_m=- Inf
-        p_hvs=- Inf
-        return p_hvs_m,p_hvs
+        p_hvs_m =- Inf
+        p_hvs =- Inf
+        print('returned on narngin')
+        yield p_hvs_m,p_hvs
     
-    if size(img1) != size(img2):
+    if img1.size() != img2.size():
         p_hvs_m=- Inf
         p_hvs=- Inf
-        return p_hvs_m,p_hvs
+
+        print('returned on img seizes')
+        yield p_hvs_m,p_hvs
     
     if nargin > 2:
         step=copy(wstep)
     else:
         step=8
     
-    img1=double(img1)
-    img2=double(img2)
-    LenXY=size(img1)
-    LenY=LenXY(1)
-    LenX=LenXY(2)
-    CSFCof=concat([[1.608443,2.339554,2.573509,1.608443,1.072295,0.643377,0.50461,0.421887],[2.144591,2.144591,1.838221,1.354478,0.989811,0.443708,0.428918,0.467911],[1.838221,1.979622,1.608443,1.072295,0.643377,0.451493,0.372972,0.459555],[1.838221,1.513829,1.169777,0.887417,0.50461,0.295806,0.321689,0.415082],[1.429727,1.169777,0.695543,0.459555,0.378457,0.236102,0.249855,0.334222],[1.072295,0.735288,0.467911,0.402111,0.317717,0.247453,0.227744,0.279729],[0.525206,0.402111,0.329937,0.295806,0.249855,0.212687,0.214459,0.254803],[0.357432,0.279729,0.270896,0.262603,0.229778,0.257351,0.249855,0.25995]])
+    img1= img1.detach().cpu().clone().numpy()
+    img2= img2.detach().cpu().clone().numpy()
+    img1 = np.transpose(img1,[1,2,0])
+    img2 = np.transpose(img2,[1,2,0])
+    print(img1.shape)
+    print(img2.shape)
+    LenXY= img1.shape
+    (_, LenX, LenY) = LenXY
+
+    CSFCof=np.array([[1.608443, 2.339554, 2.573509, 1.608443, 1.072295, 0.643377, 0.504610, 0.421887],
+                   [2.144591, 2.144591, 1.838221, 1.354478, 0.989811, 0.443708, 0.428918, 0.467911],
+                   [1.838221, 1.979622, 1.608443, 1.072295, 0.643377, 0.451493, 0.372972, 0.459555],
+                   [1.838221, 1.513829, 1.169777, 0.887417, 0.504610, 0.295806, 0.321689, 0.415082],
+                   [1.429727, 1.169777, 0.695543, 0.459555, 0.378457, 0.236102, 0.249855, 0.334222],
+                   [1.072295, 0.735288, 0.467911, 0.402111, 0.317717, 0.247453, 0.227744, 0.279729],
+                   [0.525206, 0.402111, 0.329937, 0.295806, 0.249855, 0.212687, 0.214459, 0.254803],
+                   [0.357432, 0.279729, 0.270896, 0.262603, 0.229778, 0.257351, 0.249855, 0.25995]])
     # see an explanation in [2]
     
-    MaskCof=concat([[0.390625,0.826446,1.0,0.390625,0.173611,0.0625,0.038447,0.026874],[0.694444,0.694444,0.510204,0.277008,0.147929,0.029727,0.027778,0.033058],[0.510204,0.591716,0.390625,0.173611,0.0625,0.030779,0.021004,0.031888],[0.510204,0.346021,0.206612,0.118906,0.038447,0.013212,0.015625,0.026015],[0.308642,0.206612,0.073046,0.031888,0.021626,0.008417,0.009426,0.016866],[0.173611,0.081633,0.033058,0.024414,0.015242,0.009246,0.007831,0.011815],[0.041649,0.024414,0.016437,0.013212,0.009426,0.00683,0.006944,0.009803],[0.01929,0.011815,0.01108,0.010412,0.007972,0.01,0.009426,0.010203]])
+    MaskCof=np.array([[0.390625, 0.826446, 1.000000, 0.390625, 0.173611, 0.062500, 0.038447, 0.026874],
+                    [0.694444, 0.694444, 0.510204, 0.277008, 0.147929, 0.029727, 0.027778, 0.033058],
+                    [0.510204, 0.591716, 0.390625, 0.173611, 0.062500, 0.030779, 0.021004, 0.031888],
+                    [0.510204, 0.346021, 0.206612, 0.118906, 0.038447, 0.013212, 0.015625, 0.026015],
+                    [0.308642, 0.206612, 0.073046, 0.031888, 0.021626, 0.008417, 0.009426, 0.016866],
+                    [0.173611, 0.081633, 0.033058, 0.024414, 0.015242, 0.009246, 0.007831, 0.011815],
+                    [0.041649, 0.024414, 0.016437, 0.013212, 0.009426, 0.006830, 0.006944, 0.009803],
+                    [0.019290, 0.011815, 0.011080, 0.010412, 0.007972, 0.010000, 0.009426, 0.010203]])
     # see an explanation in [1]
     
     S1=0
     S2=0
     Num=0
-    X=1
-    Y=1
+    X=0
+    Y=0
     while Y <= LenY - 7:
-
         while X <= LenX - 7:
+            #rangeB = np.arange(Y,Y+7)
+            #rangeA = np.arange(X,X+7)
+            window_shape = (1, 7, 7)
+            #TODO: PORT TO PYTHON HOW TO GET A WINDOW/patch from the array.
+            #A=img1[rangeA,rangeB]
+            #B=img2[rangeA,rangeB]
 
-            A=img1(arange(Y,Y + 7),arange(X,X + 7))
-            B=img2(arange(Y,Y + 7),arange(X,X + 7))
-            A_dct=dct2(A)
-            B_dct=dct2(B)
+            A = view_as_windows(img1, window_shape)
+            B = view_as_windows(img2, window_shape)
+            #compute the 2d Discrete Cosine Transform
+
+            A_dct= dct(A) #dct2(A)
+            B_dct= dct(B) #dct2(B)
             MaskA=maskeff(A,A_dct)
             MaskB=maskeff(B,B_dct)
             if MaskB > MaskA:
                 MaskA=copy(MaskB)
             X=X + step
-            for k in arange(1,8).reshape(-1):
-                for l in arange(1,8).reshape(-1):
+            for k in np.arange(0,7).reshape(-1):
+                for l in arange(0,7).reshape(-1):
                     u=abs(A_dct(k,l) - B_dct(k,l))
-                    S2=S2 + (dot(u,CSFCof(k,l))) ** 2
-                    if logical_or((k != 1),(l != 1)):
+                    S2=S2 + (np.dot(u,CSFCof(k,l))) ** 2
+                    if np.logical_or((k != 1),(l != 1)):
                         if u < MaskA / MaskCof(k,l):
                             u=0
                         else:
                             u=u - MaskA / MaskCof(k,l)
-                    S1=S1 + (dot(u,CSFCof(k,l))) ** 2
+                    S1=S1 + (np.dot(u,CSFCof(k,l))) ** 2
                     Num=Num + 1
 
         X=1
@@ -144,35 +180,52 @@ def psnrhvsm(img1=None,img2=None,wstep=None,*args,**kwargs):
         if S1 == 0:
             p_hvs_m=100000
         else:
-            p_hvs_m=dot(10,log10(dot(255,255) / S1))
+            p_hvs_m=np.dot(10,log10(np.dot(255,255) / S1))
         if S2 == 0:
             p_hvs=100000
         else:
-            p_hvs=dot(10,log10(dot(255,255) / S2))
+            p_hvs=np.dot(10,log10(np.dot(255,255) / S2))
+    print('returned on end of loop')  
+    print(p_hvs_m)
+    print(p_hvs)
     
     
-
 def maskeff(z=None,zdct=None,*args,**kwargs):
-    varargin = maskeff.varargin
-    nargin = maskeff.nargin
-
+    varargin = args
+    nargin = 2 + len(varargin)
+    
     # Calculation of Enorm value (see [1])
     m=0
-    MaskCof=concat([[0.390625,0.826446,1.0,0.390625,0.173611,0.0625,0.038447,0.026874],[0.694444,0.694444,0.510204,0.277008,0.147929,0.029727,0.027778,0.033058],[0.510204,0.591716,0.390625,0.173611,0.0625,0.030779,0.021004,0.031888],[0.510204,0.346021,0.206612,0.118906,0.038447,0.013212,0.015625,0.026015],[0.308642,0.206612,0.073046,0.031888,0.021626,0.008417,0.009426,0.016866],[0.173611,0.081633,0.033058,0.024414,0.015242,0.009246,0.007831,0.011815],[0.041649,0.024414,0.016437,0.013212,0.009426,0.00683,0.006944,0.009803],[0.01929,0.011815,0.01108,0.010412,0.007972,0.01,0.009426,0.010203]])
+    MaskCof=np.array([[0.390625, 0.826446, 1.000000, 0.390625, 0.173611, 0.062500, 0.038447, 0.026874],
+                    [0.694444, 0.694444, 0.510204, 0.277008, 0.147929, 0.029727, 0.027778, 0.033058],
+                    [0.510204, 0.591716, 0.390625, 0.173611, 0.062500, 0.030779, 0.021004, 0.031888],
+                    [0.510204, 0.346021, 0.206612, 0.118906, 0.038447, 0.013212, 0.015625, 0.026015],
+                    [0.308642, 0.206612, 0.073046, 0.031888, 0.021626, 0.008417, 0.009426, 0.016866],
+                    [0.173611, 0.081633, 0.033058, 0.024414, 0.015242, 0.009246, 0.007831, 0.011815],
+                    [0.041649, 0.024414, 0.016437, 0.013212, 0.009426, 0.006830, 0.006944, 0.009803],
+                    [0.01929, 0.0118150, 0.011080, 0.010412, 0.007972, 0.010000, 0.009426, 0.010203]])
     # see an explanation in [1]
     
-    for k in arange(1,8).reshape(-1):
-        for l in arange(1,8).reshape(-1):
-            if logical_or((k != 1),(l != 1)):
-                m=m + dot((zdct(k,l) ** 2),MaskCof(k,l))
+    for k in np.arange(0,7).reshape(-1):
+        for l in np.arange(0,7).reshape(-1):
+            if np.logical_or((k != 1),(l != 1)):
+                m=m + np.dot((zdct[k,l] ** 2),MaskCof[k,l])
     
     pop=vari(z)
     if pop != 0:
-        pop=(vari(z(arange(1,4),arange(1,4))) + vari(z(arange(1,4),arange(5,8))) + vari(z(arange(5,8),arange(5,8))) + vari(z(arange(5,8),arange(1,4)))) / pop
+        pop=(vari(z(np.arange(0,3),
+                    np.arange(0,3))) + vari(z(np.arange(0,3),
+                                           np.arange(4,7))) + vari(z(np.arange(4,7),
+                                                                  np.arange(4,7))) + vari(z(np.arange(4,7),
+                                                                                         np.arange(0,3)))) / pop
     
     m=sqrt(dot(m,pop)) / 32
     
 def vari(AA=None,*args,**kwargs):
-    varargin = vari.varargin
-    nargin = vari.nargin
+    varargin = args
+    nargin = 1 + len(varargin)
     d=dot(var(ravel(AA)),length(ravel(AA)))
+
+def print_v(message='', verbose =False):
+    if verbose == True:
+        print(message)
