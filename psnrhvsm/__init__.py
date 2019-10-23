@@ -4,7 +4,7 @@ import numpy as np
 import torch 
 import scipy as sp
 from scipy.fftpack import dct, dctn, idctn
-from skimage.util.shape import view_as_windows
+from skimage.util.shape import view_as_windows, view_as_blocks
 
 def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
     varargin = args
@@ -23,10 +23,16 @@ def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
         contrast masking of DCT basis functions
         PSNR-HVS is Peak Signal to Noise Ratio taking into account only CSF
         
-         Copyright(c) 2006 Nikolay Ponomarenko 
-          All Rights Reserved
+
+        Python 3 port by: Eduardo Prado , 2019  
         
-         Homepage: http://ponomarenko.info, E-mail: nikolay{}ponomarenko.info
+        Homepage: https://t2ac32.wordpress.com/, E-mail: eduardo.prado{}tum.de
+
+        Original by: 
+        Copyright(c) 2006 Nikolay Ponomarenko 
+        All Rights Reserved
+        
+        Homepage: http://ponomarenko.info, E-mail: nikolay{}ponomarenko.info
         
         ----------------------------------------------------------------------
         
@@ -58,7 +64,8 @@ def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
              Proceedings of the Second International Workshop on Video Processing 
              and Quality Metrics, Scottsdale, USA, 2006, 4 p.
        
-        Kindly report any suggestions or corrections to uagames{}mail.ru
+        Kindly report any suggestions or corrections for its python implementation to: 
+        python implementation: eduardo.prado{}tum.de
        
        #----------------------------------------------------------------------
        
@@ -89,29 +96,24 @@ def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
     if nargin < 2:
         p_hvs_m =- Inf
         p_hvs =- Inf
-        print('returned on narngin')
-        yield p_hvs_m,p_hvs
+        return p_hvs_m,p_hvs
     
     if img1.size() != img2.size():
         p_hvs_m=- Inf
         p_hvs=- Inf
-
-        print('returned on img seizes')
-        yield p_hvs_m,p_hvs
+        return p_hvs_m,p_hvs
     
     if nargin > 2:
         step=copy(wstep)
     else:
         step=8
+
+    #this is required since was originally intended to use with Pytorch.    
+    img1= img1.detach().cpu().clone().numpy()[0,:,:]
+    img2= img2.detach().cpu().clone().numpy()[0,:,:]
     
-    img1= img1.detach().cpu().clone().numpy()
-    img2= img2.detach().cpu().clone().numpy()
-    img1 = np.transpose(img1,[1,2,0])
-    img2 = np.transpose(img2,[1,2,0])
-    print(img1.shape)
-    print(img2.shape)
     LenXY= img1.shape
-    (_, LenX, LenY) = LenXY
+    ( LenX, LenY) = LenXY
 
     CSFCof=np.array([[1.608443, 2.339554, 2.573509, 1.608443, 1.072295, 0.643377, 0.504610, 0.421887],
                    [2.144591, 2.144591, 1.838221, 1.354478, 0.989811, 0.443708, 0.428918, 0.467911],
@@ -138,56 +140,65 @@ def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
     Num=0
     X=0
     Y=0
-    while Y <= LenY - 7:
-        while X <= LenX - 7:
-            #rangeB = np.arange(Y,Y+7)
-            #rangeA = np.arange(X,X+7)
-            window_shape = (1, 7, 7)
-            #TODO: PORT TO PYTHON HOW TO GET A WINDOW/patch from the array.
-            #A=img1[rangeA,rangeB]
-            #B=img2[rangeA,rangeB]
-
-            A = view_as_windows(img1, window_shape)
-            B = view_as_windows(img2, window_shape)
-            #compute the 2d Discrete Cosine Transform
-
-            A_dct= dct(A) #dct2(A)
-            B_dct= dct(B) #dct2(B)
-            MaskA=maskeff(A,A_dct)
-            MaskB=maskeff(B,B_dct)
+    window_shape = (8, 8)
+    
+    A = view_as_blocks(img1, window_shape)
+    B = view_as_blocks(img2, window_shape)
+    num_patchsA = A.shape[0]
+    num_patchsB = B.shape[0]
+    for p in range(num_patchsA):
+        for py in range(num_patchsB):
+    #compute the 2d Discrete Cosine Transform
+            patchA = A[p][py]
+            patchB = B[p][py]
+            '''Thanks to 
+            https://www.tu-ilmenau.de/fileadmin/public/mt_ams/GrundlagenDerVideotechnikb/Vorlesung/WS_2017-18/06_16-11-28DCT_-_English.pdf
+            that explains how dct work and should be modified for 2d images. 
+            '''
+            #dct2(A)
+            a_dct=dct(patchA,type=2,axis=1,norm='ortho')
+            A_dct=dct(a_dct,type=2,axis=0,norm='ortho')
+            #dct2(B)
+            b_dct=dct(patchB,type=2,axis=1,norm='ortho')
+            B_dct=dct(b_dct,type=2,axis=0,norm='ortho')
+                    
+            MaskA=maskeff(patchA,A_dct)
+            MaskB=maskeff(patchB,B_dct)
+            
             if MaskB > MaskA:
-                MaskA=copy(MaskB)
-            X=X + step
-            for k in np.arange(0,7).reshape(-1):
-                for l in arange(0,7).reshape(-1):
-                    u=abs(A_dct(k,l) - B_dct(k,l))
-                    S2=S2 + (np.dot(u,CSFCof(k,l))) ** 2
-                    if np.logical_or((k != 1),(l != 1)):
-                        if u < MaskA / MaskCof(k,l):
+                MaskA= MaskB.copy()
+            for k in range(7):
+                for l in range(7):
+                    u=abs(A_dct[k,l] - B_dct[k,l])
+                    S2=S2 + ((np.dot(u,CSFCof[k,l]))**2) #PSNR-hvs
+                    if (k != 1) or (l != 1):
+                        if u < MaskA / MaskCof[k,l]:
                             u=0
                         else:
-                            u=u - MaskA / MaskCof(k,l)
-                    S1=S1 + (np.dot(u,CSFCof(k,l))) ** 2
+                            u=u - (MaskA / MaskCof[k,l])
+                    S1=S1 + ((np.dot(u,CSFCof[k,l]))** 2) # PSNR-HVS-M
                     Num=Num + 1
-
-        X=1
-        Y=Y + step
-
     
     if Num != 0:
-        S1=S1 / Num
-        S2=S2 / Num
+        S1= S1/Num
+        S2= S2/Num
         if S1 == 0:
             p_hvs_m=100000
+            #print("p_hvs_m=100000")
         else:
-            p_hvs_m=np.dot(10,log10(np.dot(255,255) / S1))
+            p_hvs_m= 10*(np.log10(255*(255/ S1)))
+            #print('p_hvs_m: {:.0f}'.format(p_hvs_m))
         if S2 == 0:
+            #print("p_hvs=100000")
             p_hvs=100000
         else:
-            p_hvs=np.dot(10,log10(np.dot(255,255) / S2))
-    print('returned on end of loop')  
-    print(p_hvs_m)
-    print(p_hvs)
+            p_hvs= 10*(np.log10(255*(255 / S2)))
+            #print('p_hvs: {:.0f}'.format(p_hvs))
+    #print('returned on end of loop')  
+        
+    print('p_hvs_m: {:.0f} dB'.format(p_hvs_m))
+    print('p_hvs: {:.0f} dB'.format(p_hvs))
+    return p_hvs_m, p_hvs
     
     
 def maskeff(z=None,zdct=None,*args,**kwargs):
@@ -206,25 +217,44 @@ def maskeff(z=None,zdct=None,*args,**kwargs):
                     [0.01929, 0.0118150, 0.011080, 0.010412, 0.007972, 0.010000, 0.009426, 0.010203]])
     # see an explanation in [1]
     
-    for k in np.arange(0,7).reshape(-1):
-        for l in np.arange(0,7).reshape(-1):
-            if np.logical_or((k != 1),(l != 1)):
+    for k in range(7):
+        for l in range(7):
+            if (k != 1) or (l != 1):
                 m=m + np.dot((zdct[k,l] ** 2),MaskCof[k,l])
     
     pop=vari(z)
+    #print('pop: ', pop)
+    #print('z shape:', z.shape)
     if pop != 0:
-        pop=(vari(z(np.arange(0,3),
-                    np.arange(0,3))) + vari(z(np.arange(0,3),
-                                           np.arange(4,7))) + vari(z(np.arange(4,7),
-                                                                  np.arange(4,7))) + vari(z(np.arange(4,7),
-                                                                                         np.arange(0,3)))) / pop
+        block1 = vari(z[0:3, 0:3])
+        block2 = vari(z[0:3, 4:7])
+        block3 = vari(z[4:7, 4:7])
+        block4 = vari(z[4:7, 0:3])
+        '''
+        print('block1', block1.shape)
+        print('block1', block2.shape)
+        print('block1', block3.shape)
+        print('block1', block4.shape)
+        '''
+        pop=(block1 + block2 + block3 + block4 ) / pop
     
-    m=sqrt(dot(m,pop)) / 32
+    m=np.sqrt(np.dot(m,pop)) / 32
+
+    return m
     
 def vari(AA=None,*args,**kwargs):
     varargin = args
     nargin = 1 + len(varargin)
-    d=dot(var(ravel(AA)),length(ravel(AA)))
+    flat = AA.flatten(1)
+    varia = np.var(flat)
+    #flat_sz = np.size(flat)
+    
+    #print(flat)
+    #print(varia)
+    #print(flat_sz)
+    d=np.dot(varia, flat.size)
+    return d
+
 
 def print_v(message='', verbose =False):
     if verbose == True:

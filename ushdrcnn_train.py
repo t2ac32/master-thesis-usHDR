@@ -215,15 +215,6 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
             cost.backward()
             optimizer.step()
 
-            #print('>>>>>>>> Pred max: ', torch.max(prediction[0]))
-            #masks_probs = F.sigmoid(prediction)
-            #masks_probs_flat = masks_probs.view(-1)
-            #true_masks_flat = true_masks.view(-1)
-            
-            #masks_probs_flat = prediction.view(-1)
-            # Ground Truth images of masks
-            #true_masks_flat = true_masks.view(-1)
-            # Save a sample of input, output prediction on the last step - 2 of the epoch
             
             if step==1 or step % logg_freq == 0: 
                 print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Train Acc:{3:.9f}'.format(step,cost, train_loss,train_acc/step)) 
@@ -246,8 +237,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
                     grid = torchvision.utils.make_grid(train_sample,nrow=3)
                     writer.add_image('train_sample', grid, 0)
         
-        if  epoch % 15 == 0 or epoch == epochs: 
-            val_loss, val_acc = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
+        #if  epoch == 1 or epoch % 15 == 0 or epoch == epochs: 
+        val_loss, val_acc = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
                                     criterion, epoch, gpu,
                                     batch_size,
                                     expositions_num=15, tb=tb)
@@ -255,11 +246,14 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
         if tb:
                 writer.add_scalar('training_loss: ', train_loss, epoch )
                 writer.add_scalar('validation_loss', val_loss, epoch )
+                writer.add_scalar('train_accuracy', train_acc, epoch )
+                writer.add_scalar('train_accuracy', val_acc, epoch )
                 writer.add_scalars('losses', { 'training_loss': train_loss,
                                                'val_loss': val_loss}, epoch)
                
                 if polyaxon:
-                    experiment.log_metrics(training_loss=train_loss, validation_loss=val_loss)
+                    experiment.log_metrics(step=epoch,training_loss=train_loss,
+                                        validation_loss=val_loss, )
 
 
         print('{}{}{}'.format('+', '=' * 78 , '+'))
