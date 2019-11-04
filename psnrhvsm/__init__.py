@@ -26,7 +26,8 @@ def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
 
         Python 3 port by: Eduardo Prado , 2019  
         
-        Homepage: https://t2ac32.wordpress.com/, E-mail: eduardo.prado{}tum.de
+        Homepage: https://t2ac32.wordpress.com/
+        E-mail:   eduardo.prado@tum.de
 
         Original by: 
         Copyright(c) 2006 Nikolay Ponomarenko 
@@ -196,8 +197,8 @@ def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
             #print('p_hvs: {:.0f}'.format(p_hvs))
     #print('returned on end of loop')  
         
-    print('p_hvs_m: {:.0f} dB'.format(p_hvs_m))
-    print('p_hvs: {:.0f} dB'.format(p_hvs))
+    #print('p_hvs_m: {:.0f} dB'.format(p_hvs_m))
+    #print('p_hvs: {:.0f} dB'.format(p_hvs))
     return p_hvs_m, p_hvs
     
     

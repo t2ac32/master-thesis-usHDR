@@ -7,6 +7,10 @@ terminal command
 python ushdrcnn_train.py --epoch=10 --batch-size=15 -g -n -t 
 python ushdrcnn_train.py --epochs=10 --batch-size=15 --expo-num=15 -g -n -t
 
+quick test:
+python ushdrcnn_train.py --epochs=1 --batch-size=9 --expo-num=15 -g 
+
+
 ```
 Check tensorbaord Summary after training
 ```

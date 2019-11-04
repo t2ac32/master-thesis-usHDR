@@ -190,4 +190,4 @@ end
 m = sqrt(m*pop)/32;   % sqrt(m*pop/16/64)
 
 function d=vari(AA)
-  d=var(AA(:))*length(AA(:));
+  d=var( AA(:) ) * length( AA(:) );

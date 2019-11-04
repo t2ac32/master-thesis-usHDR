@@ -47,7 +47,7 @@ except ImportError:
             print('Using Tensorboard X')
         except ImportError:
             writer = SummaryWriter()
-            print('Using Tensorboard X')   
+            print('Using Tensorboard X')
     except ImportError:
         print('Could not import TensorboardX')
 
@@ -112,7 +112,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
     print('Dataset_dir' , dataSets_dir)
     print('Outputs_path', dir_checkpoints)
     experiment_id = datetime.datetime.now().strftime('%d%m_%H%M_')
-    experiment_name = 'ExpandnetLoss_{}_bs{}_lr{}_exps{}'.format(experiment_id,batch_size,lr,expositions_num)
+    experiment_name = 'ExpandnetL_psn_{}_bs{}_lr{}_exps{}'.format(experiment_id,batch_size,lr,expositions_num)
     dir_img = os.path.join(dataSets_dir, 'Org_images/')
     dir_compressions = os.path.join(dataSets_dir, 'c_images/')
     dir_mask = os.path.join(dataSets_dir, 'c_images/')
@@ -253,7 +253,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
                
                 if polyaxon:
                     experiment.log_metrics(step=epoch,training_loss=train_loss,
-                                        validation_loss=val_loss, )
+                                        validation_loss=val_loss, train_accu = train_acc,val_acc= val_acc )
 
 
         print('{}{}{}'.format('+', '=' * 78 , '+'))
