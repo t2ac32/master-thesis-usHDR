@@ -33,12 +33,6 @@ def split_ids(ids, n=2):
     return ((id)  for id in ids for i in range(n))
 
 
-def to_cropped_imgs(ids, dir, suffix, scale):
-    """From a list of tuples, returns the correct cropped img"""
-    for id, pos in ids:
-        im = resize_and_crop(Image.open(dir + id + suffix), scale=scale)
-        yield get_square(im, pos)
-
 def get_hdr_label(id, dir, suffix):
     """From a list of ids , return the set of ldr images"""   
     img_name = dir + id + '/Results/' + suffix

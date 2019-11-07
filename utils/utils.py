@@ -96,6 +96,7 @@ def normalize(x):
 def only_resizeCV(cvImage, w=224,h=224):
     img = cv2.resize(cvImage,(w,h))
     return img 
+
 def cv2torch(np_img):
     rgb = np_img[:, :, (2, 1, 0)]
     return torch.from_numpy(rgb.swapaxes(1, 2).swapaxes(0, 1))

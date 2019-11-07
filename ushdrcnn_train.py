@@ -16,6 +16,8 @@ from torch.utils.data import DataLoader
 import torchvision
 from torchvision import datasets, transforms
 
+#from GPUtil import showUtilization as gpu_usage
+
 #### Accuracy measurements
 from psnrhvsm import psnrhvsm
 import pytorch_ssim  
@@ -178,6 +180,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
         train_acc = 0 
         val_acc = 0
         model_acc = 0
+        
         for i, b in enumerate(train_data_loader):
             step += 1
             imgs, true_masks, imgs_ids = b['input'], b['target'], b['id'] 
@@ -199,8 +202,8 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
             cost = criterion(prediction,true_masks)
             
             #batch_acc = get_acc(true_masks,prediction,batch_size)
-            batch_acc = get_psnrhs(true_masks,prediction,batch_size)
-            train_acc = train_acc + batch_acc   
+            #batch_acc = get_psnrhs(true_masks,prediction,batch_size)
+            #train_acc = train_acc + batch_acc   
             '''
             Compute psnrhvsm of
             psnr ( input vs label ) = psnrTru
@@ -214,11 +217,11 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
             train_loss = np.mean(losses) 
             cost.backward()
             optimizer.step()
-
+            
             
             if step==1 or step % logg_freq == 0: 
-                print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Train Acc:{3:.9f}'.format(step,cost, train_loss,train_acc/step)) 
-                
+                #print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Train Acc:{3:.9f}'.format(step,cost, train_loss,train_acc/step)) 
+                print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}'.format(step,cost, train_loss)) 
                
             #Last Step of this Epoch
             if step ==  math.trunc(tot_steps):
@@ -238,6 +241,7 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
                     writer.add_image('train_sample', grid, 0)
         
         #if  epoch == 1 or epoch % 15 == 0 or epoch == epochs: 
+        
         val_loss, val_acc = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
                                     criterion, epoch, gpu,
                                     batch_size,
@@ -246,21 +250,20 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
         if tb:
                 writer.add_scalar('training_loss: ', train_loss, epoch )
                 writer.add_scalar('validation_loss', val_loss, epoch )
-                writer.add_scalar('train_accuracy', train_acc, epoch )
+                #writer.add_scalar('train_accuracy', train_acc, epoch )
                 writer.add_scalar('train_accuracy', val_acc, epoch )
                 writer.add_scalars('losses', { 'training_loss': train_loss,
-                                               'val_loss': val_loss}, epoch)
-               
+                                               'val_loss': val_loss}, epoch)   
                 if polyaxon:
                     experiment.log_metrics(step=epoch,training_loss=train_loss,
-                                        validation_loss=val_loss, train_accu = train_acc,val_acc= val_acc )
+                                            validation_loss=val_loss, train_accu = train_acc,val_acc= val_acc )
 
 
         print('{}{}{}'.format('+', '=' * 78 , '+'))
         print('| {0:} Epoch {1:} finished ! {2:}|'.format(' '*28 ,(epoch + 1),' '*29 ))
         print('{}{}{}'.format('+', '-' * 78 , '+'))
         print('| Summary: Train Loss:{0:0.07}, Val Loss:{1:}'.format(train_loss, val_loss))
-        print('|          Train Acc :{0:0.07}, Val Acc :{1:}'.format(train_acc, val_acc))
+        print('|          Train Acc :{0:0.07}, Avrg pnshvs :{1:}'.format(float(train_acc), val_acc))
         time_epoch = time.time() - begin_of_epoch 
         print('| Epoch ETC: {:.0f}m {:.0f}s'.format(time_epoch // 60, time_epoch % 60))   
         print('{}{}{}'.format('+', '=' * 78 , '+'))
@@ -290,51 +293,54 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
               batch_size=1,
               expositions_num=15, tb=False):
     """Evaluation without the densecrf with the dice coefficient"""
+    print('{}{}{}'.format('+', '=' * 78 , '+'))
+    print('| {0:} validating {2:}|'.format(' '*32 ,(epoch + 1),' '*32 ))
+    
 
     val_data_loader = dataloader
     net.eval()
     losses = []
     step = 0
     N_val =  len(val_data_loader)
-    tot_steps = N_val/batch_size                                                                                            
-    tot_acc = 0
-    for i, b in enumerate(val_data_loader):
-        
-        step += 1
-        imgs, true_masks, imgs_ids = b['input'], b['target'], b['id']
+                                                                                            
+    tot_psnrhs = 0
+    with torch.no_grad():
+        for i, b in enumerate(val_data_loader):
             
-        #img = b[0]
-        #true_mask = b[1]
-        #img = torch.from_numpy(img).unsqueeze(0)
-        #true_mask = torch.from_numpy(true_mask).unsqueeze(0)
-        if gpu:
-            imgs = imgs.cuda()
-            true_masks = true_masks.cuda()
+            step += 1
+            imgs, true_masks, imgs_ids = b['input'], b['target'], b['id']
+                
 
-        pred = net(imgs)
-        #cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu, tb=tb)
+            if gpu:
+                imgs = imgs.cuda()
+                true_masks = true_masks.cuda()
+            else:
+                print(' GPU not available')
 
-        #batch_acc = get_acc(true_masks,pred,batch_size)
-        batch_acc = get_psnrhs(true_masks,pred,batch_size)
+            pred = net(imgs)
             
-        tot_acc = tot_acc + batch_acc   
+            #cost, cost_input_output = Hdr_loss(imgs, true_masks, pred,sep_loss=False,gpu=gpu, tb=tb)   
+            cost = criterion(pred,true_masks)
+            losses.append(cost.item())    
             
-        cost = criterion(pred,true_masks)
-        losses.append(cost.item())    
-        # Last - 1 step
-        if step == math.trunc(tot_steps):
-            num_in_batch = random.randrange(imgs.size(0))
-            val_sample_name = imgs_ids[num_in_batch]
-            img_s  = imgs[num_in_batch]
-            gt_s   = true_masks[num_in_batch]
-            pred_img   = pred[num_in_batch]
-            val_exp_name = 'Val_' + experiment_name
-            saveTocheckpoint(dir_checkpoints, val_exp_name, val_sample_name, epoch,
-                            img_s,
-                            gt_s,
-                            pred_img)
-            
-    return np.mean(losses),tot_acc
+            #batch_acc = get_acc(true_masks,pred,batch_size)
+            batch_acc = get_psnrhs(true_masks,pred,1)
+            tot_psnrhs += batch_acc
+            # Last - 1 step
+            if step == math.trunc(N_val):
+                num_in_batch = random.randrange(imgs.size(0))
+                val_sample_name = imgs_ids[num_in_batch]
+                img_s  = imgs[num_in_batch]
+                gt_s   = true_masks[num_in_batch]
+                pred_img   = pred[num_in_batch]
+                val_exp_name = 'Val_' + experiment_name
+                saveTocheckpoint(dir_checkpoints, val_exp_name, val_sample_name, epoch,
+                                img_s,
+                                gt_s,
+                                pred_img)
+                
+        return np.mean(losses),tot_psnrhs/N_val
+
 
 def get_psnrhs(masks,preds,batch_size):
     batch_acc = 0 
@@ -378,7 +384,7 @@ def get_args():
                       type='int', help='requency for loggind data to terminal')
     parser.add_option('-g', '--gpu', action='store_true', dest='gpu',
                       default=False, help='use cuda')
-    parser.add_option('-l', '--learning-rate', dest='lr', default=0.1,
+    parser.add_option('-l', '--learning-rate', dest='lr', default=0.001,
                       type='float', help='learning rate')
     parser.add_option('-L', '--loss-lambda', dest='loss_lambda', default=5,
                       type='float', help='Loss function lambda param')

@@ -109,10 +109,10 @@ def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
     else:
         step=8
 
-    #this is required since was originally intended to use with Pytorch.    
+    #this is required since was originally intended to use with Pytorch.
+
     img1= img1.detach().cpu().clone().numpy()[0,:,:]
     img2= img2.detach().cpu().clone().numpy()[0,:,:]
-    
     LenXY= img1.shape
     ( LenX, LenY) = LenXY
 
@@ -199,6 +199,7 @@ def psnrhvsm(img1=None,img2=None,wstep=8,*args,**kwargs):
         
     #print('p_hvs_m: {:.0f} dB'.format(p_hvs_m))
     #print('p_hvs: {:.0f} dB'.format(p_hvs))
+
     return p_hvs_m, p_hvs
     
     
