@@ -5,6 +5,8 @@ from optparse import OptionParser
 import numpy as np
 import threading
 import scipy.stats as st
+import sklearn
+from sklearn.model_selection import KFold
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -90,7 +92,7 @@ class ExpandNetLoss(nn.Module):
 
 print('setup finished')
 
-def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambda=5,
+def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.30,loss_lambda=5,
               save_cp=True,
               gpu=False,
               img_scale=0.5,
@@ -125,163 +127,185 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.20,loss_lambd
         #writer.close()
     # === Load Training/Validation data =====================================================
     ids = get_ids(dir_img)
-    iddataset = split_train_val(ids, expositions_num, val_percent )
-    #print(iddataset['train']) 
-    #print(iddataset['val'])
-    N_train = len(iddataset['train'])
-    N_val = len(iddataset['val'])
-    # optimizer = optim.SGD(net.parameters(),
-    #    lr=lr,
-    #    momentum=0.9,
-    #    weight_decay=0.0005)
+    # Split into train test
+    idsset= list(ids)
+    kf = KFold(n_splits=5, shuffle=False)
+    #print('Train splits: ',kf.get_n_splits(dataset))
 
-    #=====CHOOSE Loss Criterion=============================================================
-    #criterion = nn.MSELoss(reduction='mean')
-    criterion = ExpandNetLoss(loss_lambda=loss_lambda)
-    optimizer = optim.Adagrad(net.parameters(),
-                              lr=lr,
-                              weight_decay=0.0005)
-   
-    since = time.time()
-    print('''
-        Training SETUP:
-        Epochs: {}
-        Batch size: {}
-        Learning rate: {}
-        Training size: {}
-        Validation size: {}
-        Checkpoints: {}
-        CUDA: {}
-        '''.format(epochs, batch_size, lr, N_train,
-                  N_val, str(save_cp), str(gpu)))
-    
-    train_dataset = HdrDataset(iddataset['train'], dir_compressions, dir_mask,
-                               expositions_num)
-    val_dataset = HdrDataset(iddataset['val'], dir_compressions, 
-                                         dir_mask,
-                                         expositions_num)
-
-    train_data_loader = DataLoader(train_dataset,batch_size=batch_size,shuffle=True)
-    val_data_loader = DataLoader(val_dataset,batch_size=batch_size,shuffle=True)
-    
-    for epoch in range(epochs):
-        print('\n')
-        print('{}{}{}'.format('+', '=' * 78 , '+'))       
-        print('| Starting epoch {}/{}. {}'.format(epoch + 1, epochs,(' '*57) + '|'))
-        print('{}{}{}'.format('|', '-' * 78 , '|')) 
-        begin_of_epoch = time.time()
-        tot_steps = math.trunc(N_train/batch_size)
-        net.train()
-        train_loss = 0
-        losses = []
-        val_loss = 0
-        step = 0
-        train_sample = []
-        train_acc = 0 
-        val_acc = 0
-        model_acc = 0
+    best_psnr_m = 0 
+    best_psnr_hvs = 0 
+    for train_index, test_index in kf.split(idsset):
+        iddataset = split_train_val(train_index,idsset, expositions_num, val_percent )
+        test_set = [] 
+        for im_id in test_index:
+            for e in range(expositions_num):
+                test_set.append(idsset[im_id])
         
-        for i, b in enumerate(train_data_loader):
-            step += 1
-            imgs, true_masks, imgs_ids = b['input'], b['target'], b['id'] 
-            #print(i, b['input'].size(), b['target'].size())
-            #input: [15, 3, 224, 224]), target: [15, 3, 224, 224]
-            #print('>>>>>>> Input max: ' , torch.max(imgs[0]))
-            #print('>>>>>>> mask max : ', torch.max(true_masks[0]))
-            
-            if gpu:
-                imgs = imgs.cuda()
-                true_masks = true_masks.cuda()
-            else:
-                print(' GPU not available')
-            
-            # Predicted mask images
-            optimizer.zero_grad()
-            prediction = net(imgs) #prediction shape: [B, 3, 224, 224]
-            #cost, cost_input_output = Hdr_loss(imgs, true_masks, prediction, sep_loss=False, gpu=gpu, tb=tb)
-            cost = criterion(prediction,true_masks)
-            
-            #batch_acc = get_acc(true_masks,prediction,batch_size)
-            #batch_acc = get_psnrhs(true_masks,prediction,batch_size)
-            #train_acc = train_acc + batch_acc   
-            '''
-            Compute psnrhvsm of
-            psnr ( input vs label ) = psnrTru
-            psnr ( input vs pred  ) = psnrPred
-            correct += (predicted == labels).sum().item()
+        N_train = len(iddataset['train'])
+        N_val = len(iddataset['val'])
+        N_test = len(test_set)
+        # optimizer = optim.SGD(net.parameters(),
+        #    lr=lr,
+        #    momentum=0.9,
+        #    weight_decay=0.0005)
 
-            '''
-            #loss is torch tensor
-            losses.append(cost.item())
-            
-            train_loss = np.mean(losses) 
-            cost.backward()
-            optimizer.step()
-            
-            
-            if step==1 or step % logg_freq == 0: 
-                #print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Train Acc:{3:.9f}'.format(step,cost, train_loss,train_acc/step)) 
-                print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}'.format(step,cost, train_loss)) 
-               
-            #Last Step of this Epoch
-            if step ==  math.trunc(tot_steps):
-                num_in_batch = random.randrange(imgs.size(0))
-                train_sample_name = imgs_ids[num_in_batch]
-                train_sample = [imgs[num_in_batch],true_masks[num_in_batch], prediction[num_in_batch]]
+        #=====CHOOSE Loss Criterion=============================================================
+        #criterion = nn.MSELoss(reduction='mean')
+        criterion = ExpandNetLoss(loss_lambda=loss_lambda)
+        optimizer = optim.Adagrad(net.parameters(),
+                                  lr=lr,
+                                  weight_decay=0.0005)
+       
+        since = time.time()
+        print('''
+            Training SETUP:
+            Epochs: {}
+            Batch size: {}
+            Learning rate: {}
+            Training size: {}
+            Validation size: {}
+            Test size: {}
+            Checkpoints: {}
+            CUDA: {}
+            '''.format(epochs, batch_size, lr, N_train,
+                      N_val,N_test, str(save_cp), str(gpu)))
+        
+        train_dataset = HdrDataset(iddataset['train'], dir_compressions, dir_mask,
+                                   expositions_num)
+        val_dataset = HdrDataset(iddataset['val'], dir_compressions, 
+                                             dir_mask,
+                                             expositions_num)
+        test_dataset = HdrDataset(test_set, dir_compressions, 
+                                             dir_mask,
+                                             expositions_num)
 
-                t_exp_name = 'Train_' + experiment_name
-                saveTocheckpoint(dir_checkpoints, t_exp_name, train_sample_name, epoch,
-                                     train_sample[0],
-                                     train_sample[1],
-                                     train_sample[2])
+        train_data_loader = DataLoader(train_dataset,batch_size=batch_size,shuffle=True)
+        val_data_loader = DataLoader(val_dataset,batch_size=batch_size,shuffle=True)
+        test_data_loader = DataLoader(test_dataset,batch_size=batch_size,shuffle=True)
+        
+        for epoch in range(epochs):
+            print('\n')
+            print('{}{}{}'.format('+', '=' * 78 , '+'))       
+            print('| Starting epoch {}/{}. {}'.format(epoch + 1, epochs,(' '*57) + '|'))
+            print('{}{}{}'.format('|', '-' * 78 , '|')) 
+            begin_of_epoch = time.time()
+            tot_steps = math.trunc(N_train/batch_size)
+            net.train()
+            train_loss = 0
+            losses = []
+            val_loss = 0
+            step = 0
+            train_sample = []
+            train_acc = 0 
+            val_hvsm = 0
+            val_hvs = 0
+            model_pnsr_m = 0
+            
+            for i, b in enumerate(train_data_loader):
+                step += 1
+                imgs, true_masks, imgs_ids = b['input'], b['target'], b['id'] 
+                #print(i, b['input'].size(), b['target'].size())
+                #input: [15, 3, 224, 224]), target: [15, 3, 224, 224]
+                #print('>>>>>>> Input max: ' , torch.max(imgs[0]))
+                #print('>>>>>>> mask max : ', torch.max(true_masks[0]))
                 
-                if tb:
-                    print('| saving train step {0:} sample : input,target & pred'.format(step))
-                    grid = torchvision.utils.make_grid(train_sample,nrow=3)
-                    writer.add_image('train_sample', grid, 0)
-        
-        #if  epoch == 1 or epoch % 15 == 0 or epoch == epochs: 
-        
-        val_loss, val_acc = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
-                                    criterion, epoch, gpu,
-                                    batch_size,
-                                    expositions_num=15, tb=tb)
-
-        if tb:
-                writer.add_scalar('training_loss: ', train_loss, epoch )
-                writer.add_scalar('validation_loss', val_loss, epoch )
-                #writer.add_scalar('train_accuracy', train_acc, epoch )
-                writer.add_scalar('train_accuracy', val_acc, epoch )
-                writer.add_scalars('losses', { 'training_loss': train_loss,
-                                               'val_loss': val_loss}, epoch)   
-                if polyaxon:
-                    experiment.log_metrics(step=epoch,training_loss=train_loss,
-                                            validation_loss=val_loss, train_accu = train_acc,val_acc= val_acc )
-
-
-        print('{}{}{}'.format('+', '=' * 78 , '+'))
-        print('| {0:} Epoch {1:} finished ! {2:}|'.format(' '*28 ,(epoch + 1),' '*29 ))
-        print('{}{}{}'.format('+', '-' * 78 , '+'))
-        print('| Summary: Train Loss:{0:0.07}, Val Loss:{1:}'.format(train_loss, val_loss))
-        print('|          Train Acc :{0:0.07}, Avrg pnshvs :{1:}'.format(float(train_acc), val_acc))
-        time_epoch = time.time() - begin_of_epoch 
-        print('| Epoch ETC: {:.0f}m {:.0f}s'.format(time_epoch // 60, time_epoch % 60))   
-        print('{}{}{}'.format('+', '=' * 78 , '+'))
-        
+                if gpu:
+                    imgs = imgs.cuda()
+                    true_masks = true_masks.cuda()
+                else:
+                    print(' GPU not available')
                 
-        # Training and validation loss for Tensorboard
-        #file_writer.add_summary(valid_summary, step)
-        #file_writer.add_summary(train_summary, step)
+                # Predicted mask images
+                optimizer.zero_grad()
+                prediction = net(imgs) #prediction shape: [B, 3, 224, 224]
+                #cost, cost_input_output = Hdr_loss(imgs, true_masks, prediction, sep_loss=False, gpu=gpu, tb=tb)
+                cost = criterion(prediction,true_masks)
+                #loss is torch tensor
+                losses.append(cost.item())
+                
+                train_loss = np.mean(losses) 
+                cost.backward()
+                optimizer.step()
+                
+                
+                if step==1 or step % logg_freq == 0: 
+                    #print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Train Acc:{3:.9f}'.format(step,cost, train_loss,train_acc/step)) 
+                    print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}'.format(step,cost, train_loss)) 
+                   
+                #Last Step of this Epoch
+                if step ==  math.trunc(tot_steps):
+                    num_in_batch = random.randrange(imgs.size(0))
+                    train_sample_name = imgs_ids[num_in_batch]
+                    train_sample = [imgs[num_in_batch],true_masks[num_in_batch], prediction[num_in_batch]]
 
-        if save_cp and (val_acc > model_acc):
-            model_acc = val_acc
-            model_path = os.path.join(dir_checkpoints, 'CP{}.pth'.format(epoch + 1))
-            torch.save(net.state_dict(),
-                       model_path)
-            print('Checkpoint {} saved !'.format(epoch + 1))
-    print('>' * 80)
-    time_elapsed = time.time() - since   
-    print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))     
+                    t_exp_name = 'Train_' + experiment_name
+                    saveTocheckpoint(dir_checkpoints, t_exp_name, train_sample_name, epoch,
+                                         train_sample[0],
+                                         train_sample[1],
+                                         train_sample[2])
+                    
+                    if tb:
+                        print('| saving train step {0:} sample : input,target & pred'.format(step))
+                        grid = torchvision.utils.make_grid(train_sample,nrow=3)
+                        writer.add_image('train_sample', grid, 0)
+            
+            #if  epoch == 1 or epoch % 15 == 0 or epoch == epochs: 
+            
+            val_loss, val_hvsm, val_hvs  = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
+                                        criterion, epoch, gpu,
+                                        batch_size,
+                                        expositions_num=15, tb=tb)
+
+            if tb:
+                    writer.add_scalar('training_loss: ', train_loss, epoch )
+                    writer.add_scalar('validation_loss', val_loss, epoch )
+                    #writer.add_scalar('train_accuracy', train_acc, epoch )
+                    writer.add_scalar('train_accuracy', val_hvsm, epoch )
+                    writer.add_scalar('train_accuracy', val_hvs , epoch )
+                    writer.add_scalars('losses', { 'training_loss': train_loss,
+                                                   'val_loss': val_loss}, epoch)   
+                    if polyaxon:
+                        experiment.log_metrics(step=epoch,training_loss=train_loss,
+                                                validation_loss=val_loss, train_accu = train_acc,val_hvsm= val_hvsm, val_hvs=val_hvs )
+
+
+            print('{}{}{}'.format('+', '=' * 78 , '+'))
+            print('| {0:} Epoch {1:} finished ! {2:}|'.format(' '*28 ,(epoch + 1),' '*29 ))
+            print('{}{}{}'.format('+', '-' * 78 , '+'))
+            print('| Summary: Train Loss: {0:0.07}, Val Loss:{1:}'.format(train_loss, val_loss))
+            print('|          Train pnshvs :{0:0.04}, Avrg pnshvs_m :{1:0.04},Avrg pnshvs :{2:0.04}'.format(float(train_acc), val_hvsm, val_hvs))
+            time_epoch = time.time() - begin_of_epoch 
+            print('| Epoch ETC: {:.0f}m {:.0f}s'.format(time_epoch // 60, time_epoch % 60))   
+            print('{}{}{}'.format('+', '=' * 78 , '+'))
+            
+                    
+            # Training and validation loss for Tensorboard
+            #file_writer.add_summary(valid_summary, step)
+            #file_writer.add_summary(train_summary, step)
+            
+            if save_cp and (val_hvsm > model_pnsr_m):
+                model_pnsr_m = val_hvsm
+                model_path = os.path.join(dir_checkpoints, 'CP.pth')
+                torch.save(net.state_dict(), model_path)
+                print('Checkpoint {} saved !'.format(epoch + 1))
+           
+            
+        print(model_path)
+        test_psnr_m, test_psnr_hvs = test_hdr_net(model_path,dir_checkpoints, experiment_name,
+                                            test_data_loader,
+                                            criterion,gpu,tb)
+
+        if save_cp and (test_psnr_m > best_psnr_m):
+            best_psnr_m = test_psnr_m
+            best_model_path = os.path.join(dir_checkpoints, 'Best_CP.pth')
+            torch.save(net.state_dict(),best_model_path)
+            print('Best model saved !')
+
+        print('>' * 80)
+        time_elapsed = time.time() - since   
+        print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60)) 
+
+
     if tb:
         writer.close()
     if use_notifications:
@@ -294,7 +318,7 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
               expositions_num=15, tb=False):
     """Evaluation without the densecrf with the dice coefficient"""
     print('{}{}{}'.format('+', '=' * 78 , '+'))
-    print('| {0:} validating {2:}|'.format(' '*32 ,(epoch + 1),' '*32 ))
+    print('| {0:} validating {2:} |'.format(' '*32 ,(epoch + 1),' '*32 ))
     
 
     val_data_loader = dataloader
@@ -303,7 +327,8 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
     step = 0
     N_val =  len(val_data_loader)
                                                                                             
-    tot_psnrhs = 0
+    tot_psnrm = 0
+    tot_psnrhvs = 0
     with torch.no_grad():
         for i, b in enumerate(val_data_loader):
             
@@ -323,9 +348,10 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
             cost = criterion(pred,true_masks)
             losses.append(cost.item())    
             
-            #batch_acc = get_acc(true_masks,pred,batch_size)
-            batch_acc = get_psnrhs(true_masks,pred,1)
-            tot_psnrhs += batch_acc
+            batch_hvsm, batch_hvs = get_psnrhs(true_masks,pred,1)
+            tot_psnrm += batch_hvsm
+            tot_psnrhvs += batch_hvs
+
             # Last - 1 step
             if step == math.trunc(N_val):
                 num_in_batch = random.randrange(imgs.size(0))
@@ -339,11 +365,48 @@ def eval_hdr_net(net,dir_checkpoints, experiment_name, dataloader,criterion,epoc
                                 gt_s,
                                 pred_img)
                 
-        return np.mean(losses),tot_psnrhs/N_val
+        return np.mean(losses), tot_psnrm/N_val, tot_psnrhvs/N_val
 
+def test_hdr_net(model_path,dir_checkpoints, experiment_name, dataloader,criterion,
+                gpu=False,
+                expositions_num=15,
+                tb=False):
+    
+    print('{}{}{}'.format('+', '=' * 78 , '+'))
+    print('| {0:} Testing {1:}|'.format(' '*30 ,' '*30 ))
+    print('{}{}{}'.format('+', '=' * 78 , '+'))
+    tot_psnrm = 0
+    tot_psnrhvs = 0
+    steps = 0
+    for i, b in enumerate(dataloader):
+        steps += 1
+        imgs, true_masks, imgs_ids = b['input'], b['target'], b['id'] 
+        net = UNet(n_channels=3, n_classes=3)
+        net.load_state_dict(torch.load(model_path))
+
+        if gpu:
+            net.cuda()
+            imgs = imgs.cuda()
+            true_masks = true_masks.cuda()
+        else:
+            print(' GPU not available')
+        
+        
+        pred = net(imgs)
+        
+        batch_hvsm, batch_hvs = get_psnrhs(true_masks,pred,1)
+        tot_psnrm += batch_hvsm
+        tot_psnrhvs += batch_hvs
+
+    avg_psnr_m = tot_psnrm/steps
+    avg_psnr_hvs = tot_psnrhvs/steps
+    print('| AVG PSNR-HVS-M: {0:0.04} | AVG PSNR-hvs: {1:0.04} '.format(avg_psnr_m,avg_psnr_hvs  ))
+    print('{}{}{}'.format('+', '-' * 78 , '+'))
+    return  avg_psnr_m, avg_psnr_hvs
 
 def get_psnrhs(masks,preds,batch_size):
-    batch_acc = 0 
+    batch_hvsm = 0 
+    batch_hvs = 0 
 
     if masks.size(0) < batch_size:
         batch_size = masks.size(0)
@@ -352,9 +415,12 @@ def get_psnrhs(masks,preds,batch_size):
         mask = masks[index]
         pred = preds[index]
         p_hvs_m, p_hvs = psnrhvsm(mask, pred)
-        batch_acc += p_hvs_m
-
-    return batch_acc / batch_size
+        batch_hvsm += p_hvs_m
+        batch_hvs += p_hvs
+    batch_hvsm = p_hvs_m / batch_size
+    batch_hvs = p_hvs / batch_size 
+       
+    return batch_hvsm, batch_hvs
 
     
 def get_acc (masks,preds,batch_size):
@@ -388,7 +454,7 @@ def get_args():
                       type='float', help='learning rate')
     parser.add_option('-L', '--loss-lambda', dest='loss_lambda', default=5,
                       type='float', help='Loss function lambda param')
-    parser.add_option('-m', '--save-cp', dest='save',
+    parser.add_option('-m', '--save-cp', action='store_true', dest='save',
                        default=False, help='save model')
     parser.add_option('-n', '--notifications', action='store_true', dest='pushbullet',
                       default=False, help='use pushbullet notifications')

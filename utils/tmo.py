@@ -11,12 +11,6 @@ class BaseTMO(object):
     def __call__(self, img):
         return self.op.process(img)
 
-TMO_DICT = {
-    'reinhard': Reinhard,
-    'durand': Durand,
-}
-
-
 class Reinhard(BaseTMO):
     def __init__(
         self,
@@ -58,6 +52,10 @@ class Durand(BaseTMO):
             sigma_color=sigma_color,
             gamma=gamma,
         )
+TMO_DICT = {
+    'reinhard': Reinhard,
+    'durand': Durand,
+}
 
 def tone_map(img, tmo_name, **kwargs):
     return TMO_DICT[tmo_name](**kwargs)(img)

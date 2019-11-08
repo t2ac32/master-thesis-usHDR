@@ -6,8 +6,6 @@ import PIL.Image
 import cv2
 import torch
 from torchvision.utils import save_image
-import sklearn
-from sklearn.model_selection import KFold
 
 def get_square(img, pos):
     """Extract a left or a right square from ndarray shape : (H, W, C))"""
@@ -60,33 +58,27 @@ def batch(iterable, batch_size):
     if len(b) > 0:
         yield b
 
-def split_train_val(dataset, expositions=15,val_percent=0.20):
+def split_train_val(indexes, dataset, expositions=15,val_percent=0.30):
     #print('splitting into train an validation sets:')
-    dataset = list(dataset)
-    length = len(dataset)
+    train = indexes
+    length = len(train)
     n = int(length * val_percent)
-    random.shuffle(dataset)
-    t = dataset[:-n]
-    v =  dataset[-n:]
-    train = []
-    val = []
-    '''
-    kf =KFold(n_splits=5)
-    kf.get_n_splits(ids)
-
-    for train_index, test_index in kf.split(train_dataset):
-        train_set, val_set =  ids(train_index), ids(test_index)
-    ''' 
-
-
+    #random.shuffle(train)
+    t = train[:-n]
+    v =  train[-n:]
+   
+    train_set = []
+    val_set = []
+    
     for im_id in t:
         for e in range(expositions):
-            train.append(im_id)
+            train_set.append(dataset[im_id])
+    
     for im_id in v:
         for e in range(expositions):
-            val.append(im_id)
-    
-    return {'train': train , 'val':val}
+            val_set.append(dataset[im_id])
+
+    return {'train': train_set , 'val':val_set}
 
 
 def normalize(x):

@@ -26,9 +26,8 @@ environment:
      limits: 1
 params:
   lr:  0.001
-  epochs: 100
+  epochs: 60
   batch_size: 15
-  save: True
   gpu: True
   notifications: True
   polyaxon: True
@@ -46,7 +45,6 @@ params:
 
 run:
   cmd: python -u ushdrcnn_train.py  --epochs={{ epochs }} \
-                        --save-cp={{ save }} \
                         --batch-size={{ batch_size }} \
                          --learning-rate={{ lr }} \
                          --expo-num={{expositions}} \
@@ -55,6 +53,6 @@ run:
                          -p \
                          -g \
                          -n \
-                         -t 
-                         #-m
+                         -t \
+                         -m
 
