@@ -298,10 +298,6 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.30,loss_lambd
             writer.add_scalars('cross val hvsm:',model_psnr_m, num_fold)
             writer.add_scalars('cross val hvs:',model_psnr_hvs, num_fold)
 
-        
-
-        
-
         print('>' * 80)
         time_elapsed = time.time() - since   
         print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60)) 
