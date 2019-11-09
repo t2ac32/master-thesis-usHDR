@@ -134,16 +134,16 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.30,loss_lambd
 
     best_psnr_m = 0 
     best_psnr_hvs = 0 
-    for train_index, test_index in kf.split(idsset):
+    #for train_index, test_index in kf.split(idsset):
         iddataset = split_train_val(train_index,idsset, expositions_num, val_percent )
-        test_set = [] 
-        for im_id in test_index:
-            for e in range(expositions_num):
-                test_set.append(idsset[im_id])
+        #test_set = [] 
+        #for im_id in test_index:
+        #    for e in range(expositions_num):
+        #        test_set.append(idsset[im_id])
         
         N_train = len(iddataset['train'])
         N_val = len(iddataset['val'])
-        N_test = len(test_set)
+        N_test = 0 #len(test_set)
         # optimizer = optim.SGD(net.parameters(),
         #    lr=lr,
         #    momentum=0.9,
@@ -175,14 +175,12 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.30,loss_lambd
         val_dataset = HdrDataset(iddataset['val'], dir_compressions, 
                                              dir_mask,
                                              expositions_num)
-        test_dataset = HdrDataset(test_set, dir_compressions, 
-                                             dir_mask,
-                                             expositions_num)
+        #test_dataset = HdrDataset(test_set, dir_compressions, dir_mask,expositions_num)
 
         train_data_loader = DataLoader(train_dataset,batch_size=batch_size,shuffle=True)
         val_data_loader = DataLoader(val_dataset,batch_size=batch_size,shuffle=True)
-        test_data_loader = DataLoader(test_dataset,batch_size=batch_size,shuffle=True)
-        
+        #test_data_loader = DataLoader(test_dataset,batch_size=batch_size,shuffle=True)
+        best_hvsm = 0.0
         for epoch in range(epochs):
             print('\n')
             print('{}{}{}'.format('+', '=' * 78 , '+'))       
@@ -227,7 +225,6 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.30,loss_lambd
                 cost.backward()
                 optimizer.step()
                 
-                
                 if step==1 or step % logg_freq == 0: 
                     #print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}, Train Acc:{3:.9f}'.format(step,cost, train_loss,train_acc/step)) 
                     print('| Step: {0:}, cost:{1:}, Train Loss:{2:.9f}'.format(step,cost, train_loss)) 
@@ -254,58 +251,48 @@ def train_net(net, epochs=5, batch_size=1, lr=0.001, val_percent=0.30,loss_lambd
             val_loss, val_hvsm, val_hvs  = eval_hdr_net(net,dir_checkpoints,experiment_name, val_data_loader,
                                         criterion, epoch, gpu,
                                         batch_size,
-                                        expositions_num=15, tb=tb)
-
+                                        expositions_num=15, tb=tb)   
             if tb:
                     writer.add_scalar('training_loss: ', train_loss, epoch )
                     writer.add_scalar('validation_loss', val_loss, epoch )
-                    #writer.add_scalar('train_accuracy', train_acc, epoch )
-                    writer.add_scalar('train_accuracy', val_hvsm, epoch )
-                    writer.add_scalar('train_accuracy', val_hvs , epoch )
+                    writer.add_scalar('train_hvsm', val_hvsm, epoch )
+                    writer.add_scalar('train_hvs', val_hvs , epoch )
                     writer.add_scalars('losses', { 'training_loss': train_loss,
                                                    'val_loss': val_loss}, epoch)   
                     if polyaxon:
                         experiment.log_metrics(step=epoch,training_loss=train_loss,
-                                                validation_loss=val_loss, train_accu = train_acc,val_hvsm= val_hvsm, val_hvs=val_hvs )
+                                                validation_loss=val_loss, val_hvsm= val_hvsm, val_hvs=val_hvs )
 
 
             print('{}{}{}'.format('+', '=' * 78 , '+'))
             print('| {0:} Epoch {1:} finished ! {2:}|'.format(' '*28 ,(epoch + 1),' '*29 ))
             print('{}{}{}'.format('+', '-' * 78 , '+'))
             print('| Summary: Train Loss: {0:0.07}, Val Loss:{1:}'.format(train_loss, val_loss))
-            print('|          Train pnshvs :{0:0.04}, Avrg pnshvs_m :{1:0.04},Avrg pnshvs :{2:0.04}'.format(float(train_acc), val_hvsm, val_hvs))
+            print('|          Avrg psnr-hvs_m :{0:0.04},Avrg psnr-hvs :{1:0.04}'.format(float(train_acc), val_hvsm, val_hvs))
             time_epoch = time.time() - begin_of_epoch 
             print('| Epoch ETC: {:.0f}m {:.0f}s'.format(time_epoch // 60, time_epoch % 60))   
-            print('{}{}{}'.format('+', '=' * 78 , '+'))
-            
-                    
-            # Training and validation loss for Tensorboard
-            #file_writer.add_summary(valid_summary, step)
-            #file_writer.add_summary(train_summary, step)
-            
-            if save_cp and (val_hvsm > model_pnsr_m):
-                model_pnsr_m = val_hvsm
-                model_path = os.path.join(dir_checkpoints, 'CP.pth')
+            print('{}{}{}'.format('+', '=' * 78 , '+'))     
+                
+            if save_cp and (val_hvsm > best_hvsm):
+                best_hvsm = val_hvsm
+                model_path = os.path.join(dir_checkpoints, 'BestCP.pth')
                 torch.save(net.state_dict(), model_path)
-                print('Checkpoint {} saved !'.format(epoch + 1))
-           
-            
-        print(model_path)
-        test_psnr_m, test_psnr_hvs = test_hdr_net(model_path,dir_checkpoints, experiment_name,
-                                            test_data_loader,
-                                            criterion,gpu,tb)
-
-        if save_cp and (test_psnr_m > best_psnr_m):
-            best_psnr_m = test_psnr_m
-            best_model_path = os.path.join(dir_checkpoints, 'Best_CP.pth')
-            torch.save(net.state_dict(),best_model_path)
-            print('Best model saved !')
-
-        print('>' * 80)
+                print('Checkpoint saved !')
+        '''
+        test_psnr_m, test_psnr_hvs = test_hdr_net(model_path,dir_checkpoints,
+                                                    experiment_name,
+                                                    test_data_loader,
+                                                    criterion,gpu,tb)
+                                                    if save_cp and (test_psnr_m > best_psnr_m):
+        best_psnr_m = test_psnr_m
+        best_model_path = os.path.join(dir_checkpoints, 'Best_CP.pth')
+        torch.save(net.state_dict(),best_model_path)
+        print('Best model saved !')
+        '''
+         print('>' * 80)
         time_elapsed = time.time() - since   
         print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60)) 
-
-
+        
     if tb:
         writer.close()
     if use_notifications:
