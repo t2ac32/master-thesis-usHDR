@@ -25,15 +25,16 @@ environment:
      requests: 1
      limits: 1
 params:
-  lr:  0.001
-  epochs: 60
+  lr:  0.002
+  epochs: 1
+  w_decay: 0.0005
   batch_size: 15
   gpu: True
   notifications: True
   polyaxon: True
   expositions: 15
   tensor_b: True
-  logg_freq: 100
+  logg_freq: 20
   checkpoint: $POLYAXON_RUN_OUTPUTS_PATH
   #img_scale:
   #momentum: 0.9 
@@ -54,5 +55,6 @@ run:
                          -g \
                          -n \
                          -t \
+                         --weight-decay={{w_decay}}\
                          -m
 

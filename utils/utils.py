@@ -58,9 +58,9 @@ def batch(iterable, batch_size):
     if len(b) > 0:
         yield b
 
-def split_train_val(indexes, dataset, expositions=15,val_percent=0.30):
+def split_train_val(dataset, expositions=15,val_percent=0.2):
     #print('splitting into train an validation sets:')
-    train = indexes
+    train = dataset 
     length = len(train)
     n = int(length * val_percent)
     #random.shuffle(train)
@@ -72,11 +72,11 @@ def split_train_val(indexes, dataset, expositions=15,val_percent=0.30):
     
     for im_id in t:
         for e in range(expositions):
-            train_set.append(dataset[im_id])
+            train_set.append(im_id)
     
     for im_id in v:
         for e in range(expositions):
-            val_set.append(dataset[im_id])
+            val_set.append(im_id)
 
     return {'train': train_set , 'val':val_set}
 

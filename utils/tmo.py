@@ -52,13 +52,17 @@ class Durand(BaseTMO):
             sigma_color=sigma_color,
             gamma=gamma,
         )
+
 TMO_DICT = {
     'reinhard': Reinhard,
     'durand': Durand,
 }
 
 def tone_map(img, tmo_name, **kwargs):
-    return TMO_DICT[tmo_name](**kwargs)(img)
+	print(tmo_name)
+	print(TMO_DICT)
+	print(TMO_DICT[tmo_name])
+	return TMO_DICT[tmo_name](**kwargs)(img)
 
 def create_tmo_param_from_args(opt):
 	if opt.tmo == 'exposure':
