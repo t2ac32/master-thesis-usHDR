@@ -120,27 +120,27 @@ http://cluster.ifl:31811
 |           | hdrReinhard_local.png
 ```
 
-		| Training SETUP:       | Epoch finished ! 								|
-		|Epochs: 1			    | Train Loss:0.000266							|
-		|Batch size: 15		    | Val Loss:0.000046, running_val_loss:0.000046  |
-		|Learning rate: 0.1	    | Validation loss: 0.000046188					|
+		| Training SETUP:       | Epoch finished ! 						|
+		|Epochs: 1		| Train Loss:0.000266						|
+		|Batch size: 15		| Val Loss:0.000046, running_val_loss:0.000046  		|
+		|Learning rate: 0.1	| Validation loss: 0.000046188					|
 		|Training size: 3042    | Training complete in 68m 48s					|
-		| Validation size: 760  |												|
-		|Checkpoints: False		|												|
-		|CUDA: True				|												|	
-		| ----------------------|-----------------------------------------------|
+		| Validation size: 760  |								|
+		|Checkpoints: False	|								|
+		|CUDA: True		|								|	
+		| ----------------------|---------------------------------------------------------------|
 
 
 
-		| Training SETUP:       | Epoch finished ! 								|
-		|Epochs: 8			    | Train Loss:0.000274							|
-		|Batch size: 15		    | Val Loss:0.000049, running_val_loss:0.000049  |
-		|Learning rate: 0.1	    | Validation loss: 0.000049238					|
+		| Training SETUP:       | Epoch finished ! 						|
+		|Epochs: 8		| Train Loss:0.000274						|
+		|Batch size: 15		| Val Loss:0.000049, running_val_loss:0.000049  		|
+		|Learning rate: 0.1     | Validation loss: 0.000049238					|
 		|Training size: 3042    | Training complete in 399m 26s					|
-		| Validation size: 760  |												|
-		|Checkpoints: False		|												|
-		|CUDA: True				|												|	
-		| ----------------------|-----------------------------------------------|
+		| Validation size: 760  |								|
+		|Checkpoints: False	|								|
+		|CUDA: True		|								|	
+		| ----------------------|---------------------------------------------------------------|
 
 
 
